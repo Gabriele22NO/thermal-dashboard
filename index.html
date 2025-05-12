@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Thermal Logger - Dashboard Ottimizzata</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { background: #111; color: white; font-family: sans-serif; text-align: center; }
+    canvas { background: #222; margin-top: 20px; border-radius: 8px; }
+    h1 { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Thermal Logger - Dashboard</h1>
+  <canvas id="tempChart" width="900" height="400"></canvas>
+
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
+
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      complete: function(results) {
+        const data = results.data;
+        const labels = [];
+        const temps = [];
+
+        for (let i = 0; i < data.length; i += 5) {
+          const row = data[i];
+          const timestamp = row['Timestamp'] || row['timestamp'];
+          const tempRaw = row['Temp1 (°C)'] || row['Temp'] || row['Temperature'];
+          const temp = parseFloat(tempRaw);
+          if (timestamp && !isNaN(temp)) {
+            const timeOnly = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            labels.push(timeOnly);
+            temps.push(temp);
+          }
+        }
+
+        const ctx = document.getElementById('tempChart').getContext('2d');
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Temperatura (°C)',
+              data: temps,
+              borderColor: 'lime',
+              backgroundColor: 'rgba(0,255,0,0.05)',
+              borderWidth: 2,
+              tension: 0.3,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { labels: { color: 'white' } }
+            },
+            scales: {
+              x: {
+                ticks: { color: 'white', autoSkip: true, maxTicksLimit: 12 }
+              },
+              y: {
+                title: { display: true, text: '°C', color: 'white' },
+                ticks: { color: 'white' },
+                grid: { color: '#444' }
+              }
+            }
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
