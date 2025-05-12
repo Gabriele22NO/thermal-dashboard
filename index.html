@@ -1,0 +1,124 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Thermal Logger - Dashboard Avanzata</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <style>
+    body { background: #111; color: white; font-family: sans-serif; text-align: center; }
+    canvas { background: #222; margin-top: 20px; border-radius: 8px; }
+    h1 { margin-top: 20px; }
+    button {
+      margin: 10px;
+      padding: 8px 16px;
+      font-size: 16px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>Thermal Logger - Dashboard Interattiva</h1>
+  <canvas id="tempChart" width="900" height="450"></canvas>
+  <div>
+    <button onclick="resetZoom()">🔄 Reset Zoom</button>
+    <button onclick="zoomIn()">🔍 Zoom In</button>
+    <button onclick="zoomOut()">🔎 Zoom Out</button>
+  </div>
+
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
+
+    function movingAverage(data, windowSize) {
+      const averaged = [];
+      for (let i = 0; i < data.length; i++) {
+        const start = Math.max(0, i - windowSize);
+        const window = data.slice(start, i + 1);
+        const avg = window.reduce((sum, val) => sum + val, 0) / window.length;
+        averaged.push(avg);
+      }
+      return averaged;
+    }
+
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      complete: function(results) {
+        const data = results.data;
+        const labels = [];
+        const temps = [];
+
+        for (let i = 0; i < data.length; i += 3) {
+          const row = data[i];
+          const timestamp = row['Timestamp'] || row['timestamp'];
+          const tempRaw = row['Temp1 (°C)'] || row['Temp'] || row['Temperature'];
+          const temp = parseFloat(tempRaw);
+          if (timestamp && !isNaN(temp)) {
+            const timeOnly = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            labels.push(timeOnly);
+            temps.push(temp);
+          }
+        }
+
+        const smoothed = movingAverage(temps, 5);
+        const ctx = document.getElementById('tempChart').getContext('2d');
+        const chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Temperatura (°C)',
+              data: smoothed,
+              borderColor: 'lime',
+              backgroundColor: 'rgba(0,255,0,0.05)',
+              borderWidth: 3,
+              tension: 0.3,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              zoom: {
+                pan: {
+                  enabled: true,
+                  mode: 'x'
+                },
+                zoom: {
+                  wheel: { enabled: true },
+                  pinch: { enabled: true },
+                  mode: 'x'
+                }
+              },
+              legend: { labels: { color: 'white' } }
+            },
+            scales: {
+              x: {
+                ticks: { color: 'white', autoSkip: true, maxTicksLimit: 15 }
+              },
+              y: {
+                title: { display: true, text: '°C', color: 'white' },
+                ticks: { color: 'white' },
+                grid: { color: '#444' }
+              }
+            }
+          }
+        });
+
+        window.resetZoom = () => chart.resetZoom();
+        window.zoomIn = () => chart.zoom(1.2);
+        window.zoomOut = () => chart.zoom(0.8);
+      }
+    });
+  </script>
+</body>
+</html>
