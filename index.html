@@ -1,0 +1,191 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Thermal Logger - Dashboard Produzione Avanzata</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body { background: #111; color: white; font-family: sans-serif; text-align: center; padding-bottom: 60px; }
+    canvas { background: #222; margin-top: 20px; border-radius: 8px; }
+    .stats, .controls { margin-top: 20px; font-size: 18px; }
+    button {
+      margin: 5px;
+      padding: 8px 16px;
+      font-size: 14px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover { background: #666; }
+    select {
+      margin: 5px;
+      padding: 6px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Thermal Logger - Cicli Analizzati e Filtrati</h1>
+  <div class="controls">
+    <button onclick="resetZoom()">🔄 Reset Zoom</button>
+    <button onclick="zoomIn()">➕ Zoom In</button>
+    <button onclick="zoomOut()">➖ Zoom Out</button>
+    <button onclick="exportExcel()">⬇️ Report Excel</button>
+    <label>Filtro minuti:
+      <select onchange="setTimeWindow(this.value)">
+        <option value="0">Tutto</option>
+        <option value="60">Ultimi 60 min</option>
+        <option value="180">Ultime 3 ore</option>
+      </select>
+    </label>
+  </div>
+  <div class="stats" id="stats"></div>
+  <canvas id="chart" width="960" height="480"></canvas>
+
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
+    let fullData = [], filteredData = [], chart;
+
+    function parseTime(str) {
+      const d = new Date(str);
+      return isNaN(d) ? null : d;
+    }
+
+    function getTurn(date) {
+      const h = date.getHours();
+      if (h >= 6 && h < 14) return "06:00-14:00";
+      if (h >= 14 && h < 22) return "14:00-22:00";
+      return "22:00-06:00";
+    }
+
+    function smooth(values, k = 5) {
+      return values.map((_, i, a) => {
+        const start = Math.max(0, i - k);
+        const end = Math.min(a.length, i + k + 1);
+        const window = a.slice(start, end);
+        return window.reduce((sum, v) => sum + v, 0) / window.length;
+      });
+    }
+
+    function detectValleys(data, minIntervalMs = 180000, maxSlope = -0.2) {
+      const valleys = [];
+      for (let i = 1; i < data.length - 1; i++) {
+        if (
+          data[i].temp < data[i - 1].temp &&
+          data[i].temp < data[i + 1].temp &&
+          (valleys.length === 0 || data[i].timestamp - data[valleys[valleys.length - 1]].timestamp > minIntervalMs)
+        ) {
+          valleys.push(i);
+        }
+      }
+      return valleys;
+    }
+
+    function showStats(valleys, data) {
+      const total = valleys.length;
+      const times = valleys.map(i => data[i].timestamp);
+      const diff = times.slice(1).map((t, i) => (t - times[i]) / 60000);
+      const avgTime = diff.reduce((a, b) => a + b, 0) / diff.length || 0;
+
+      const counts = { '06:00-14:00': 0, '14:00-22:00': 0, '22:00-06:00': 0 };
+      valleys.forEach(i => counts[getTurn(data[i].timestamp)]++);
+
+      document.getElementById("stats").innerHTML = `
+        <div>🧮 Cicli rilevati: <b>${total}</b></div>
+        <div>⏱️ Tempo medio: <b>${avgTime.toFixed(1)} min</b></div>
+        <div>👷‍♂️ Turno 06–14: <b>${counts["06:00-14:00"]}</b></div>
+        <div>👷‍♂️ Turno 14–22: <b>${counts["14:00-22:00"]}</b></div>
+        <div>🌙 Turno 22–06: <b>${counts["22:00-06:00"]}</b></div>
+      `;
+    }
+
+    function renderChart(data) {
+      const labels = data.map(d => d.timestamp.toLocaleTimeString());
+      const temps = smooth(data.map(d => d.temp), 5);
+      const valleys = detectValleys(data);
+
+      if (chart) chart.destroy();
+      const ctx = document.getElementById('chart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Temperatura (°C)',
+              data: temps,
+              borderColor: 'lime',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3
+            },
+            {
+              type: 'scatter',
+              label: 'Minimi (fine ciclo)',
+              data: valleys.map(i => ({ x: labels[i], y: temps[i] })),
+              backgroundColor: 'red',
+              pointRadius: 5
+            }
+          ]
+        },
+        options: {
+          plugins: {
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+            },
+            legend: { labels: { color: 'white' } }
+          },
+          scales: {
+            x: { ticks: { color: 'white' } },
+            y: { ticks: { color: 'white' }, grid: { color: '#444' } }
+          }
+        }
+      });
+
+      showStats(valleys, data);
+    }
+
+    function resetZoom() { chart.resetZoom(); }
+    function zoomIn() { chart.zoom(1.2); }
+    function zoomOut() { chart.zoom(0.8); }
+
+    function setTimeWindow(minutes) {
+      if (parseInt(minutes) === 0) {
+        renderChart(fullData);
+      } else {
+        const cutoff = new Date(Date.now() - minutes * 60000);
+        const filtered = fullData.filter(d => d.timestamp > cutoff);
+        renderChart(filtered);
+      }
+    }
+
+    function exportExcel() {
+      const rows = fullData.map(d => [d.timestamp.toISOString(), d.temp]);
+      const ws = XLSX.utils.aoa_to_sheet([["Timestamp", "Temp1 (°C)"], ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Report");
+      XLSX.writeFile(wb, "report_produzione.xlsx");
+    }
+
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      complete: function(res) {
+        fullData = res.data.map(r => {
+          const t = parseTime(r['Timestamp']);
+          const temp = parseFloat(r['Temp1 (°C)']);
+          return t && !isNaN(temp) ? { timestamp: t, temp } : null;
+        }).filter(Boolean);
+        renderChart(fullData);
+      }
+    });
+  </script>
+</body>
+</html>
