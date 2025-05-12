@@ -1,0 +1,238 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Thermal Logger - Produzione Ottimizzata</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      font-size: 20px;
+      margin-top: 12px;
+    }
+    #controls, #stats {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin: 10px;
+      font-size: 14px;
+    }
+    button, input, select {
+      background: #222;
+      color: #fff;
+      padding: 6px 10px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    button:hover {
+      background: #444;
+      cursor: pointer;
+    }
+    canvas {
+      width: 90vw;
+      height: 50vh;
+      background: #222;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Thermal Logger - Controllo Produzione</h1>
+  <div id="controls">
+    <input id="minutes" type="number" placeholder="Filtro minuti" />
+    <input id="target" type="number" placeholder="Prod. attesa" />
+    <input id="tMin" type="number" placeholder="Soglia min °C" />
+    <input id="tMax" type="number" placeholder="Soglia max °C" />
+    <button onclick="applyFilter()">🔍 Applica Filtro</button>
+    <button onclick="resetZoom()">🔄 Reset Zoom</button>
+    <button onclick="exportReport()">📥 Report Excel</button>
+  </div>
+  <div id="stats"></div>
+  <canvas id="chart"></canvas>
+
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
+    let rawData = [], chart;
+
+    function parseTime(str) {
+      const d = new Date(str);
+      return isNaN(d) ? null : d;
+    }
+
+    function getTurn(d) {
+      const h = d.getHours();
+      if (h >= 6 && h < 14) return "06-14";
+      if (h >= 14 && h < 22) return "14-22";
+      return "22-06";
+    }
+
+    function cleanData(data) {
+      const filtered = [];
+      for (let i = 0; i < data.length; i++) {
+        const cur = data[i];
+        if (!cur) continue;
+        if (i === 0 || Math.abs(cur.temp - data[i - 1].temp) <= 4) {
+          filtered.push(cur);
+        }
+      }
+      return filtered;
+    }
+
+    function smooth(values, k = 10) {
+      return values.map((_, i) => {
+        const start = Math.max(0, i - k);
+        const end = Math.min(values.length, i + k + 1);
+        const win = values.slice(start, end);
+        return win.reduce((a, b) => a + b, 0) / win.length;
+      });
+    }
+
+    function detectCycles(data, minInterval = 180000) {
+      let cycles = 0, last = null;
+      for (let i = 1; i < data.length - 1; i++) {
+        if (data[i].temp > data[i - 1].temp && data[i].temp > data[i + 1].temp) {
+          if (!last || data[i].timestamp - last > minInterval) {
+            last = data[i].timestamp;
+            cycles++;
+          }
+        }
+      }
+      return cycles;
+    }
+
+    function showStats(cycles, data) {
+      const target = parseInt(document.getElementById("target").value) || 0;
+      const stats = document.getElementById("stats");
+      const turns = { "06-14": 0, "14-22": 0, "22-06": 0 };
+      const interval = Math.floor(data.length / cycles);
+      for (let i = 0; i < cycles; i++) {
+        const t = data[i * interval]?.timestamp;
+        if (t) turns[getTurn(t)]++;
+      }
+      const efficiency = target > 0 ? ((cycles / target) * 100).toFixed(1) : "-";
+      stats.innerHTML = `
+        <div>🧮 Cicli stimati: <b>${cycles}</b></div>
+        <div>🎯 Obiettivo: <b>${target || '-'}</b></div>
+        <div>✅ Efficienza: <b>${efficiency}%</b></div>
+        <div>👷 06-14: <b>${turns["06-14"]}</b></div>
+        <div>👷 14-22: <b>${turns["14-22"]}</b></div>
+        <div>🌙 22-06: <b>${turns["22-06"]}</b></div>
+      `;
+    }
+
+    function renderChart(data) {
+      const labels = data.map(d => d.timestamp.toLocaleTimeString());
+      const temps = smooth(data.map(d => d.temp));
+      const cycles = detectCycles(data);
+
+      const minThresh = parseFloat(document.getElementById("tMin").value);
+      const maxThresh = parseFloat(document.getElementById("tMax").value);
+
+      if (chart) chart.destroy();
+      const ctx = document.getElementById("chart").getContext("2d");
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Temperatura (°C)",
+              data: temps,
+              borderColor: "lime",
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.3
+            },
+            ...(isFinite(minThresh) ? [{
+              label: "Soglia Min",
+              data: Array(temps.length).fill(minThresh),
+              borderColor: "red",
+              borderDash: [5, 5],
+              borderWidth: 1,
+              pointRadius: 0
+            }] : []),
+            ...(isFinite(maxThresh) ? [{
+              label: "Soglia Max",
+              data: Array(temps.length).fill(maxThresh),
+              borderColor: "orange",
+              borderDash: [5, 5],
+              borderWidth: 1,
+              pointRadius: 0
+            }] : [])
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+            },
+            legend: { labels: { color: "white" } }
+          },
+          scales: {
+            x: { ticks: { color: "white" } },
+            y: { ticks: { color: "white" }, grid: { color: "#333" } }
+          }
+        }
+      });
+
+      showStats(cycles, data);
+    }
+
+    function resetZoom() { chart?.resetZoom(); }
+
+    function applyFilter() {
+      const mins = parseInt(document.getElementById("minutes").value);
+      const cutoff = isNaN(mins) || mins === 0 ? null : new Date(Date.now() - mins * 60000);
+      const filtered = !cutoff ? rawData : rawData.filter(d => d.timestamp > cutoff);
+      renderChart(filtered);
+    }
+
+    function exportReport() {
+      const count = detectCycles(rawData);
+      const interval = Math.floor(rawData.length / count);
+      const rows = [["Ora stimata ciclo", "Turno"]];
+      for (let i = 0; i < count; i++) {
+        const t = rawData[i * interval]?.timestamp;
+        if (t) rows.push([t.toISOString(), getTurn(t)]);
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Produzione");
+      XLSX.writeFile(wb, "report_cicli.xlsx");
+    }
+
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      complete: function(res) {
+        rawData = res.data.map(r => {
+          const t = parseTime(r["Timestamp"]);
+          const temp = parseFloat(r["Temp1 (°C)"]);
+          return t && !isNaN(temp) ? { timestamp: t, temp } : null;
+        }).filter(Boolean);
+        rawData = cleanData(rawData);
+        renderChart(rawData);
+      }
+    });
+  </script>
+</body>
+</html>
