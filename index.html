@@ -1,0 +1,150 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Thermal Production Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { background: #111; color: #fff; font-family: sans-serif; margin: 0; padding: 0; }
+    header { background: #222; padding: 1em; text-align: center; }
+    h1 { margin: 0; font-size: 1.5em; color: lime; }
+    main { display: flex; flex-wrap: wrap; padding: 1em; }
+    canvas { background: #222; border-radius: 5px; margin-bottom: 2em; }
+    section.stats, section.controls { flex: 1; min-width: 300px; padding: 1em; }
+    section.controls { max-width: 350px; background: #1a1a1a; border-left: 2px solid #333; }
+    .btn { background: #333; color: #fff; border: 1px solid #555; padding: 6px 10px; margin: 5px; border-radius: 5px; cursor: pointer; }
+    .highlight { color: #0f0; font-weight: bold; }
+    .alert { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header><h1>🔧 Thermal Production Dashboard</h1></header>
+  <main>
+    <section class="stats">
+      <canvas id="chart" width="900" height="400"></canvas>
+      <div id="cycleReport"></div>
+    </section>
+    <section class="controls">
+      <h2>📊 Report</h2>
+      <p id="productivity"></p>
+      <p id="scrapReport"></p>
+      <button class="btn" onclick="resetZoom()">Reset Zoom</button>
+      <button class="btn" onclick="downloadReport()">Scarica Report</button>
+    </section>
+  </main>
+  <script>
+    const sheetURL = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart;
+
+    function parseTurn(date) {
+      const h = date.getHours();
+      if (h >= 6 && h < 14) return '1';
+      if (h >= 14 && h < 22) return '2';
+      return '3';
+    }
+
+    function loadData() {
+      Papa.parse(sheetURL, {
+        download: true,
+        header: true,
+        complete: function(results) {
+          const data = results.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
+          const times = data.map(r => new Date(r.Timestamp));
+          const temps = data.map(r => parseFloat(r["Temp1 (°C)"]));
+          const labels = times.map(t => t.toLocaleTimeString());
+          const ciclo = data.map(r => r.Ciclo || "");
+
+          const smoothed = temps.map((_, i, arr) => {
+            const slice = arr.slice(Math.max(0, i - 2), i + 1);
+            return slice.reduce((a, b) => a + b, 0) / slice.length;
+          });
+
+          const colors = ciclo.map(c => {
+            if (c === "scarto") return "rgba(255,0,0,0.5)";
+            if (c === "ok") return "rgba(0,255,0,0.5)";
+            return "rgba(0,191,255,0.2)";
+          });
+
+          if (chart) chart.destroy();
+          chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: "Temperatura (°C)",
+                data: smoothed,
+                borderColor: "#0f0",
+                backgroundColor: "rgba(0,255,0,0.1)",
+                pointRadius: 0,
+                fill: true,
+                segment: {
+                  backgroundColor: ctx => colors[ctx.p0DataIndex]
+                }
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                zoom: {
+                  pan: { enabled: true, mode: 'x' },
+                  zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                },
+                legend: { labels: { color: '#fff' } }
+              },
+              scales: {
+                x: { ticks: { color: '#ccc' } },
+                y: { ticks: { color: '#ccc' } }
+              }
+            }
+          });
+
+          const stats = {
+            total: 0,
+            ok: 0,
+            scarto: 0,
+            perTurno: { '1': { ok: 0, scarto: 0 }, '2': { ok: 0, scarto: 0 }, '3': { ok: 0, scarto: 0 } }
+          };
+
+          ciclo.forEach((c, i) => {
+            const t = parseTurn(times[i]);
+            if (c === "ok") {
+              stats.ok++;
+              stats.perTurno[t].ok++;
+              stats.total++;
+            }
+            if (c === "scarto") {
+              stats.scarto++;
+              stats.perTurno[t].scarto++;
+              stats.total++;
+            }
+          });
+
+          const productivity = `Totale cicli: <span class='highlight'>${stats.total}</span><br>
+          Buoni: <span class='highlight'>${stats.ok}</span>, Scarti: <span class='alert'>${stats.scarto}</span><br><br>
+          Turno 1 (06-14): ${stats.perTurno["1"].ok} ok / ${stats.perTurno["1"].scarto} scarto<br>
+          Turno 2 (14-22): ${stats.perTurno["2"].ok} ok / ${stats.perTurno["2"].scarto} scarto<br>
+          Turno 3 (22-06): ${stats.perTurno["3"].ok} ok / ${stats.perTurno["3"].scarto} scarto`;
+
+          document.getElementById("productivity").innerHTML = productivity;
+          document.getElementById("scrapReport").innerHTML = `<strong>Efficienza:</strong> ${(stats.ok / stats.total * 100).toFixed(1)}%`;
+        }
+      });
+    }
+
+    function resetZoom() {
+      chart.resetZoom();
+    }
+
+    function downloadReport() {
+      alert("🚧 Export Excel in arrivo nella prossima versione.");
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
