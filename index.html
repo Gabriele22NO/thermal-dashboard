@@ -1,0 +1,154 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard Produzione Termica</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { background: #111; color: #eee; font-family: sans-serif; margin: 0; padding: 0; }
+    header { background: #222; padding: 1em; text-align: center; }
+    h1 { margin: 0; color: lime; }
+    main { display: flex; flex-wrap: wrap; padding: 1em; }
+    canvas { background: #222; border-radius: 5px; margin-bottom: 1em; }
+    section.stats, section.controls { flex: 1; min-width: 300px; padding: 1em; }
+    section.controls { max-width: 400px; background: #1c1c1c; border-left: 2px solid #333; }
+    .btn { background: #333; color: #fff; border: 1px solid #555; padding: 6px 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; width: 100%; }
+    .highlight { color: #0f0; font-weight: bold; }
+    .alert { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header><h1>📊 Thermal Dashboard Avanzata</h1></header>
+  <main>
+    <section class="stats">
+      <canvas id="chart" width="900" height="400"></canvas>
+    </section>
+    <section class="controls">
+      <h2>🧮 Statistiche</h2>
+      <div id="summary"></div>
+      <button class="btn" onclick="resetZoom()">🔄 Reset Zoom</button>
+    </section>
+  </main>
+  <script>
+    const url = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart;
+
+    function parseTurno(date) {
+      const h = date.getHours();
+      if (h >= 6 && h < 14) return '1';
+      if (h >= 14 && h < 22) return '2';
+      return '3';
+    }
+
+    function movingAverage(data, window = 7) {
+      return data.map((_, i, arr) => {
+        const slice = arr.slice(Math.max(0, i - window + 1), i + 1);
+        return slice.reduce((sum, val) => sum + val, 0) / slice.length;
+      });
+    }
+
+    function loadData() {
+      Papa.parse(url, {
+        download: true,
+        header: true,
+        complete: res => {
+          const data = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
+          const times = data.map(r => new Date(r.Timestamp));
+          const temps = data.map(r => parseFloat(r["Temp1 (°C)"]));
+          const ciclo = data.map(r => r.Ciclo || "");
+          const labels = times.map(t => t.toLocaleTimeString());
+          const smoothed = movingAverage(temps, 7);
+
+          const colors = ciclo.map(c => {
+            if (c === "scarto") return "rgba(255,0,0,0.4)";
+            if (c === "ok") return "rgba(0,255,0,0.4)";
+            return "rgba(0,180,255,0.2)";
+          });
+
+          if (chart) chart.destroy();
+          chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [{
+                label: "Temp1 (°C)",
+                data: smoothed,
+                borderColor: "#0f0",
+                backgroundColor: "rgba(0,255,0,0.05)",
+                pointRadius: 0,
+                fill: true,
+                segment: { backgroundColor: ctx => colors[ctx.p0DataIndex] }
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                zoom: {
+                  pan: { enabled: true, mode: 'x' },
+                  zoom: { wheel: { enabled: true }, mode: 'x' }
+                },
+                legend: { labels: { color: "#fff" } }
+              },
+              scales: {
+                x: { ticks: { color: '#aaa' } },
+                y: { ticks: { color: '#aaa' } }
+              }
+            }
+          });
+
+          const turni = { '1': [], '2': [], '3': [] };
+          let cicliTot = 0, scarti = 0;
+          let prevOkTime = null;
+          const tcicli = [];
+
+          data.forEach((r, i) => {
+            if (r.Ciclo === "ok" || r.Ciclo === "scarto") {
+              const turno = parseTurno(times[i]);
+              turni[turno].push(r.Ciclo);
+              if (r.Ciclo === "ok") {
+                cicliTot++;
+                if (prevOkTime) {
+                  const dt = (times[i] - prevOkTime) / 60000;
+                  tcicli.push(dt);
+                }
+                prevOkTime = times[i];
+              } else {
+                scarti++;
+              }
+            }
+          });
+
+          const prod = cicliTot + scarti;
+          const buoni = prod - scarti;
+          const tempo = (times[times.length - 1] - times[0]) / 3600000;
+          const obiettivo = 180;
+          const atteso = Math.round(obiettivo * (tempo / 24));
+          const efficienza = buoni / atteso * 100;
+          const tcMedia = tcicli.length ? (tcicli.reduce((a, b) => a + b, 0) / tcicli.length) : 0;
+          const tcAnomali = tcicli.filter(t => t > tcMedia * 1.3).length;
+
+          document.getElementById("summary").innerHTML = `
+            <p><b>Periodo:</b> ${tempo.toFixed(1)} h</p>
+            <p><b>Pezzi prodotti:</b> ${prod}, <b>Scarti:</b> ${scarti}, <b>Buoni:</b> ${buoni}</p>
+            <p><b>Obiettivo contestualizzato:</b> ${atteso} pezzi</p>
+            <p><b>Efficienza:</b> ${efficienza.toFixed(1)}%</p>
+            <p><b>Tempo ciclo medio:</b> ${tcMedia.toFixed(1)} min</p>
+            <p><b>Cicli anomali (lunghi):</b> ${tcAnomali}</p>
+          `;
+        }
+      });
+    }
+
+    function resetZoom() {
+      chart.resetZoom();
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
