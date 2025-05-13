@@ -101,6 +101,9 @@
           csvData = res.data;
           let data = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
 
+          const startDate = document.getElementById('startDate')?.valueAsDate;
+          const endDate = document.getElementById('endDate')?.valueAsDate;
+
           if (startDate || endDate) {
             data = data.filter(r => {
               const d = new Date(r.Timestamp);
@@ -116,6 +119,19 @@
 
               return dateOk && timeOk;
             });
+          }
+
+          const filterType = document.getElementById('cycleType')?.value || 'all';
+          if (filterType !== 'all') {
+            data = data.filter(r => r.Ciclo === filterType);
+          }
+
+          times = data.map(r => new Date(r.Timestamp));
+          originalData = data.map(r => parseFloat(r["Temp1 (°C)"]));
+          ciclo = data.map(r => r.Ciclo || "");
+
+          updateChart();
+        }
           }
 
           const filterType = document.getElementById('cycleType')?.value || 'all';
@@ -282,6 +298,11 @@
     } = jsPDF;
         const pdf = new PDF();
         pdf.text("Report Produzione - NEW OLEF", 10, 10);
+        pdf.html(document.body, { x: 10, y: 20 }).then(() => pdf.save('report_produzione.pdf'));
+      });
+    } = jsPDF;
+        const pdf = new PDF();
+        pdf.text("Report Produzione - NEW OLEF", 10, 10);
         pdf.html(document.querySelector('body'), { x: 10, y: 20 }).then(() => pdf.save('report_produzione.pdf'));
       });
     } = jsPDF;
@@ -298,10 +319,22 @@
       csvData.forEach(r => {
         if (!r.Timestamp || !r["Temp1 (°C)"] || !r.Ciclo) return;
         const date = new Date(r.Timestamp).toLocaleDateString("it-IT");
-        if (!daily[date]) daily[date] = { total:
+        if (!daily[date]) daily[date] = { total: 0, ok: 0, scarto: 0 };
+        daily[date].total++;
+        if (r.Ciclo === "ok") daily[date].ok++;
+        if (r.Ciclo === "scarto") daily[date].scarto++;
+      });
+      const rows = Object.entries(daily).map(([date, d]) => {
+        const eff = d.total ? ((d.ok - d.scarto) / d.total * 100).toFixed(1) : '0.0';
+        return `<li><b>${date}</b>: ${d.total} pezzi, efficienza ${eff}%</li>`;
+      }).join("
+");
+      document.getElementById("dailyTrend").innerHTML = `<ul>${rows}</ul>`;
+    }
     function filterByDate() {
       loadData();
     }
   </script>
 </body>
 </html>
+
