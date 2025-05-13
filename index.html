@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard Analisi Termica Produzione</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { background: #0e0e0e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
+    header { background: #1a1a1a; padding: 1em; text-align: center; border-bottom: 2px solid #333; }
+    h1 { margin: 0; color: #00d8ff; font-size: 1.8em; }
+    main { display: flex; flex-wrap: wrap; padding: 1em; gap: 1em; }
+    canvas { background: #222; border-radius: 10px; box-shadow: 0 0 10px #000; }
+    section.stats, section.controls { flex: 1; min-width: 300px; padding: 1em; }
+    section.controls { max-width: 450px; background: #1c1c1c; border-left: 2px solid #333; border-radius: 10px; }
+    .btn { background: #005577; color: #fff; border: none; padding: 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+    .btn:hover { background: #0077aa; }
+    .highlight { color: #00ff99; font-weight: bold; }
+    .alert { color: #ff4444; font-weight: bold; }
+    label { display: block; margin-top: 1em; font-weight: bold; }
+    input[type=number] { width: 100%; padding: 6px; margin-top: 5px; background: #222; border: 1px solid #555; color: #fff; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <header><h1>📈 Analisi Termica Produzione - NEW OLEF</h1></header>
+  <main>
+    <section class="stats">
+      <canvas id="chart" width="900" height="400"></canvas>
+    </section>
+    <section class="controls">
+      <h2>🛠️ Controlli</h2>
+      <label for="minTemp">Temperatura minima (°C)</label>
+      <input type="number" id="minTemp" value="660">
+      <label for="maxTemp">Temperatura massima (°C)</label>
+      <input type="number" id="maxTemp" value="750">
+      <button class="btn" onclick="applyThresholds()">📏 Applica Soglie</button>
+      <button class="btn" onclick="resetZoom()">🔄 Reset Zoom</button>
+      <h2>📊 Statistiche</h2>
+      <div id="summary"></div>
+      <div id="turni"></div>
+    </section>
+  </main>
+
+  <script>
+    const url = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart;
+
+    function parseTurno(date) {
+      const h = date.getHours();
+      if (h >= 6 && h < 14) return 'Turno 1';
+      if (h >= 14 && h < 22) return 'Turno 2';
+      return 'Turno 3';
+    }
+
+    function smoothData(data, window = 12) {
+      return data.map((_, i, arr) => {
+        const slice = arr.slice(Math.max(0, i - window + 1), i + 1);
+        return slice.reduce((sum, val) => sum + val, 0) / slice.length;
+      });
+    }
+
+    let originalData = [];
+    let times = [];
+    let ciclo = [];
+
+    function loadData() {
+      Papa.parse(url, {
+        download: true,
+        header: true,
+        complete: res => {
+          const data = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
+          times = data.map(r => new Date(r.Timestamp));
+          originalData = data.map(r => parseFloat(r["Temp1 (°C)"]));
+          ciclo = data.map(r => r.Ciclo || "");
+          updateChart();
+        }
+      });
+    }
+
+    function applyThresholds() {
+      const min = parseFloat(document.getElementById('minTemp').value);
+      const max = parseFloat(document.getElementById('maxTemp').value);
+      updateChart(min, max);
+    }
+
+    function updateChart(minT = null, maxT = null) {
+      const smoothed = smoothData(originalData);
+      const labels = times.map(t => t.toLocaleTimeString());
+      const colors = ciclo.map((c, i) => {
+        const val = originalData[i];
+        if (c === "scarto") return "rgba(255,0,0,0.4)";
+        if ((minT !== null && val < minT) || (maxT !== null && val > maxT)) return "rgba(255,165,0,0.4)";
+        return "rgba(0,255,100,0.2)";
+      });
+
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: "Temperatura Smussata (°C)",
+            data: smoothed,
+            borderColor: "#00ffcc",
+            backgroundColor: "rgba(0,255,200,0.05)",
+            pointRadius: 0,
+            fill: true,
+            segment: { backgroundColor: ctx => colors[ctx.p0DataIndex] }
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, mode: 'x' }
+            },
+            legend: { labels: { color: "#fff" } }
+          },
+          scales: {
+            x: { ticks: { color: '#aaa' } },
+            y: { ticks: { color: '#aaa' } }
+          }
+        }
+      });
+
+      const turni = { 'Turno 1': [], 'Turno 2': [], 'Turno 3': [] };
+      let cicliTot = 0, scarti = 0;
+      let prevOkTime = null;
+      const tcicli = [];
+
+      ciclo.forEach((c, i) => {
+        if (c === "ok" || c === "scarto") {
+          const turno = parseTurno(times[i]);
+          turni[turno].push(c);
+          if (c === "ok") {
+            cicliTot++;
+            if (prevOkTime) {
+              const dt = (times[i] - prevOkTime) / 60000;
+              tcicli.push(dt);
+            }
+            prevOkTime = times[i];
+          } else {
+            scarti++;
+          }
+        }
+      });
+
+      const tempo = (times[times.length - 1] - times[0]) / 3600000;
+      const buoni = cicliTot;
+      const obiettivo = 180;
+      const atteso = Math.round(obiettivo * (tempo / 24));
+      const efficienza = buoni / atteso * 100;
+      const tcMedia = tcicli.length ? (tcicli.reduce((a, b) => a + b, 0) / tcicli.length) : 0;
+
+      document.getElementById("summary").innerHTML = `
+        <p><b>Periodo:</b> ${tempo.toFixed(1)} h</p>
+        <p><b>Prodotti:</b> ${cicliTot + scarti}, <b>Buoni:</b> ${buoni}, <b>Scarti:</b> ${scarti}</p>
+        <p><b>Efficienza:</b> ${efficienza.toFixed(1)}%</p>
+        <p><b>Tempo ciclo medio:</b> ${tcMedia.toFixed(1)} min</p>
+      `;
+
+      document.getElementById("turni").innerHTML = `
+        <h3>Produzione per Turno</h3>
+        <ul>
+          <li>Turno 1: ${turni['Turno 1'].length} pezzi</li>
+          <li>Turno 2: ${turni['Turno 2'].length} pezzi</li>
+          <li>Turno 3: ${turni['Turno 3'].length} pezzi</li>
+        </ul>
+      `;
+    }
+
+    function resetZoom() {
+      chart.resetZoom();
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
