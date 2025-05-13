@@ -97,6 +97,13 @@ $1
     let ciclo = [];
 
     function loadData() {
+  // 🔒 Recupera filtri salvati se disponibili
+  const savedFilters = JSON.parse(localStorage.getItem('dashboardFilters') || '{}');
+  ["startDate", "endDate", "startTime", "endTime", "cycleType", "minTemp", "maxTemp", "targetProd", "chartLibrary"].forEach(id => {
+    if (savedFilters[id] !== undefined && document.getElementById(id)) {
+      document.getElementById(id).value = savedFilters[id];
+    }
+  });
   const startDate = document.getElementById('startDate')?.valueAsDate;
   const endDate = document.getElementById('endDate')?.valueAsDate;
   const startTime = document.getElementById('startTime')?.value;
@@ -225,20 +232,6 @@ $1
     };
     Plotly.newPlot('plotlyChart', [plotlyTrace], layout);
   }
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            zoom: {
-              pan: { enabled: true, mode: 'x' },
-              zoom: { wheel: { enabled: true }, mode: 'x' }
-            },
-            legend: { labels: { color: "#fff" } }
-          },
-          scales: {
-            x: { ticks: { color: '#aaa' } },
-            y: { ticks: { color: '#aaa' } }
-          }
         }
       });
 
@@ -320,7 +313,7 @@ $1
     }
 
     $1
-function toggleChartLibrary() {
+window.toggleChartLibrary = function() {
   updateChart();
 }
 
@@ -348,8 +341,13 @@ function toggleChartLibrary() {
 
     loadData();
 
-    function filterByDate() {
-  console.log('Filtro attivato');
+    window.filterByDate = function() {
+  const filtersToSave = {};
+  ["startDate", "endDate", "startTime", "endTime", "cycleType", "minTemp", "maxTemp", "targetProd", "chartLibrary"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) filtersToSave[id] = el.value;
+  });
+  localStorage.setItem('dashboardFilters', JSON.stringify(filtersToSave));
   loadData();
 }
 
