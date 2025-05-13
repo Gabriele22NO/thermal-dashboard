@@ -108,11 +108,18 @@ $1
     header: true,
     complete: res => {
           csvData = res.data;
-          let data = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
+          let data = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]).map(r => {
+  const [month, day, yearAndTime] = r.Timestamp.split('/');
+  const [year, time] = yearAndTime.split(' ');
+  const [hour, minute, second] = time.split(':');
+  const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour}:${minute}:${second}`;
+  r._parsedDate = new Date(iso);
+  return r;
+});
 
           if (startDate || endDate || startTime || endTime) {
             data = data.filter(r => {
-              const d = new Date(r.Timestamp);
+              const d = r._parsedDate;
               const timeStr = d.toTimeString().substring(0,5);
               const dateOk = (!startDate || d >= startDate) && (!endDate || d <= endDate);
               const timeOk = (!startTime || timeStr >= startTime) && (!endTime || timeStr <= endTime);
@@ -124,7 +131,7 @@ $1
             data = data.filter(r => r.Ciclo === filterType);
           }
 
-          times = data.map(r => new Date(r.Timestamp));
+          times = data.map(r => r._parsedDate);
           originalData = data.map(r => parseFloat(r["Temp1 (°C)"]));
           ciclo = data.map(r => r.Ciclo || "");
 
