@@ -24,7 +24,7 @@
     input[type=number] { width: 100%; padding: 6px; margin-top: 5px; background: #222; border: 1px solid #555; color: #fff; border-radius: 5px; }
     ul { padding-left: 20px; }
   </style>
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 $1
 <body>
   <header><h1>📈 Analisi Termica Produzione - NEW OLEF</h1></header>
@@ -137,10 +137,7 @@ $1
 
           updateChart();
     }
-  }); = document.getElementById('cycleType')?.value || 'all';
-          if (filterType !== 'all') {
-            data = data.filter(r => r.Ciclo === filterType);
-          });
+  });
           }
 
           times = data.map(r => new Date(r.Timestamp));
@@ -156,7 +153,7 @@ $1
       updateChart(min, max);
     }
 
-    function updateChart($1) {
+    function updateChart(minT = null, maxT = null) {
   const lib = document.getElementById('chartLibrary')?.value || 'chartjs';
   document.getElementById('chart').style.display = lib === 'chartjs' ? 'block' : 'none';
   document.getElementById('plotlyChart').style.display = lib === 'plotly' ? 'block' : 'none';
