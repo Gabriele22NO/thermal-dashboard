@@ -24,12 +24,18 @@
     input[type=number] { width: 100%; padding: 6px; margin-top: 5px; background: #222; border: 1px solid #555; color: #fff; border-radius: 5px; }
     ul { padding-left: 20px; }
   </style>
-</head>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+$1
 <body>
   <header><h1>📈 Analisi Termica Produzione - NEW OLEF</h1></header>
   <main>
     <section class="stats">
       <canvas id="chart" width="900" height="400"></canvas>
+<div id="plotlyChart" style="display:none; width: 100%; height: 400px;"></div>
+<select id="chartLibrary" onchange="toggleChartLibrary()" class="btn">
+  <option value="chartjs" selected>📈 Chart.js</option>
+  <option value="plotly">📊 Plotly</option>
+</select>
     </section>
     <section class="controls">
       $1
@@ -143,7 +149,10 @@
       updateChart(min, max);
     }
 
-    function updateChart(minT = null, maxT = null) {
+    function updateChart($1) {
+  const lib = document.getElementById('chartLibrary')?.value || 'chartjs';
+  document.getElementById('chart').style.display = lib === 'chartjs' ? 'block' : 'none';
+  document.getElementById('plotlyChart').style.display = lib === 'plotly' ? 'block' : 'none';
       renderDailyTrend();
       const smoothed = smoothData(originalData);
       const labels = times.map(t => t.toLocaleTimeString());
@@ -156,21 +165,62 @@
 
       const points = ciclo.map(c => (c === "ok" ? 5 : 0));
 
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: "Temperatura Smussata (°C)",
-            data: smoothed,
-            borderColor: "#00ffcc",
-            backgroundColor: "rgba(0,255,200,0.05)",
-            pointRadius: points,
-            pointBackgroundColor: points.map(p => (p ? "yellow" : "transparent")),
-            fill: true,
-            segment: { backgroundColor: ctx => colors[ctx.p0DataIndex] }
-          }]
+      if (lib === 'chartjs') {
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: "Temperatura Smussata (°C)",
+          data: smoothed,
+          borderColor: "#00ffcc",
+          backgroundColor: "rgba(0,255,200,0.05)",
+          pointRadius: points,
+          pointBackgroundColor: points.map(p => (p ? "yellow" : "transparent")),
+          fill: true,
+          segment: { backgroundColor: ctx => colors[ctx.p0DataIndex] }
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          zoom: {
+            pan: { enabled: true, mode: 'x' },
+            zoom: { wheel: { enabled: true }, mode: 'x' }
+          },
+          legend: { labels: { color: "#fff" } }
+        },
+        scales: {
+          x: { ticks: { color: '#aaa' } },
+          y: { ticks: { color: '#aaa' } }
+        }
+      }
+    });
+  } else {
+    const plotlyTrace = {
+      x: labels,
+      y: smoothed,
+      type: 'scatter',
+      mode: 'lines+markers',
+      marker: {
+        color: points.map(p => (p ? 'yellow' : 'rgba(0,0,0,0)')),
+        size: points
+      },
+      line: { color: '#00ffcc' },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(0,255,200,0.1)'
+    };
+    const layout = {
+      plot_bgcolor: '#222',
+      paper_bgcolor: '#222',
+      font: { color: '#eee' },
+      margin: { t: 30, b: 40 },
+      xaxis: { title: 'Orario' },
+      yaxis: { title: 'Temp (°C)' }
+    };
+    Plotly.newPlot('plotlyChart', [plotlyTrace], layout);
+  }
         },
         options: {
           responsive: true,
@@ -265,9 +315,10 @@
       `;
     }
 
-    function resetZoom() {
-      chart.resetZoom();
-    }
+    $1
+function toggleChartLibrary() {
+  updateChart();
+}
 
     function exportCSV() {
       const csv = Papa.unparse(csvData);
