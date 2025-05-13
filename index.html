@@ -10,131 +10,41 @@
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    body { background: #0e0e0e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
-    header { background: #1a1a1a; padding: 1em; text-align: center; border-bottom: 2px solid #333; }
-    h1 { margin: 0; color: #00d8ff; font-size: 1.8em; }
-    main { display: flex; flex-wrap: wrap; padding: 1em; gap: 1em; }
-    canvas { background: #222; border-radius: 10px; box-shadow: 0 0 10px #000; }
-    section.stats, section.controls { flex: 1; min-width: 300px; padding: 1em; }
-    section.controls { max-width: 450px; background: #1c1c1c; border-left: 2px solid #333; border-radius: 10px; }
-    .btn { background: #005577; color: #fff; border: none; padding: 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
-    .btn:hover { background: #0077aa; }
-    .highlight { color: #00ff99; font-weight: bold; }
-    .alert { color: #ff4444; font-weight: bold; }
-    label { display: block; margin-top: 1em; font-weight: bold; }
-    input[type=number] { width: 100%; padding: 6px; margin-top: 5px; background: #222; border: 1px solid #555; color: #fff; border-radius: 5px; }
-    ul { padding-left: 20px; }
+    body { background: #111; color: #eee; font-family: sans-serif; padding: 1rem; }
+    #summary ul { list-style: none; padding: 0; }
+    #summary li { margin: 0.3rem 0; }
+    canvas, #plotlyChart { margin-top: 1rem; }
+    #controls { margin: 1rem 0; }
+    #tableTurni { width: 100%; margin-top: 1rem; border-collapse: collapse; }
+    #tableTurni th, #tableTurni td { border: 1px solid #666; padding: 0.5rem; text-align: center; }
   </style>
 </head>
 <body>
-  <header><h1>📈 Analisi Termica Produzione - NEW OLEF</h1></header>
-  <main>
-    <section class="stats">
-      <canvas id="chart" width="900" height="400"></canvas>
-      <div id="plotlyChart" style="display:none; width: 100%; height: 400px;"></div>
-      <select id="chartLibrary" onchange="toggleChartLibrary()" class="btn">
-        <option value="chartjs" selected>📈 Chart.js</option>
-        <option value="plotly">📊 Plotly</option>
-      </select>
-    </section>
-    <section class="controls">
-      <label for="minTemp">Temperatura minima (°C)</label>
-      <input type="number" id="minTemp" value="660">
-      <label for="maxTemp">Temperatura massima (°C)</label>
-      <input type="number" id="maxTemp" value="750">
-      <label for="targetProd">Obiettivo produzione (pezzi / 24h)</label>
-      <input type="number" id="targetProd" value="180">
-      <button class="btn" onclick="applyThresholds()">📏 Applica Soglie</button>
-      <button class="btn" onclick="resetZoom()">🔄 Reset Zoom</button>
-      <button class="btn" onclick="exportCSV()">📤 Esporta CSV</button>
-      <button class="btn" onclick="exportPDF()">🧾 Esporta Report PDF</button>
-      <label for="dateStart">Data inizio:</label>
-      <input type="date" id="dateStart">
-      <label for="dateEnd">Data fine:</label>
-      <input type="date" id="dateEnd">
-      <label for="shift">Turno:</label>
-      <select id="shift">
-        <option value="">Tutti i turni</option>
-        <option value="Turno 1">Turno 1 (6-14)</option>
-        <option value="Turno 2">Turno 2 (14-22)</option>
-        <option value="Turno 3">Turno 3 (22-6)</option>
-      </select>
-      <button class="btn" onclick="loadData()">🔍 Applica Filtri</button>
-      <div id="summary"></div>
-      <div id="turni"></div>
-    </section>
-    <section class="controls">
-      <h2>📆 Trend Giornaliero</h2>
-      <div id="dailyTrend"></div>
-    </section>
-  </main>
+  <h1>Dashboard Analisi Termica</h1>
+  <div id="controls">
+    <label for="chartLibrary">Libreria grafico:</label>
+    <select id="chartLibrary" onchange="toggleChartLibrary()">
+      <option value="chartjs">Chart.js</option>
+      <option value="plotly" selected>Plotly</option>
+    </select>
+    <label for="filterTurno">Filtro turno:</label>
+    <select id="filterTurno" onchange="updateChart()">
+      <option value="all">Tutti</option>
+      <option value="A">Turno A</option>
+      <option value="B">Turno B</option>
+      <option value="C">Turno C</option>
+    </select>
+  </div>
+
+  <div id="summary"></div>
+  <table id="tableTurni"></table>
+  <canvas id="chart" style="display:none;"></canvas>
+  <div id="plotlyChart" style="width: 100%; height: 400px;"></div>
+  <div id="istogrammaTurni" style="width: 100%; height: 300px;"></div>
+
   <script>
-    const url = 'https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1';
     const ctx = document.getElementById('chart').getContext('2d');
-    let chart, csvData;
-
-    function toggleChartLibrary() {
-      updateChart();
-    }
-
-    function updateChart(min = null, max = null) {
-      if (!times.length || !originalData.length) return;
-
-      const lib = document.getElementById('chartLibrary')?.value || 'chartjs';
-      document.getElementById('chart').style.display = lib === 'chartjs' ? 'block' : 'none';
-      document.getElementById('plotlyChart').style.display = lib === 'plotly' ? 'block' : 'none';
-
-      const smoothed = smoothData(originalData);
-
-      if (lib === 'chartjs') {
-        if (chart) chart.destroy();
-        chart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: times.map(t => t.toLocaleTimeString()),
-            datasets: [{
-              label: "Temp Smussata (°C)",
-              data: smoothed,
-              borderColor: "#00ffcc",
-              fill: true,
-              backgroundColor: "rgba(0,255,200,0.05)",
-              pointRadius: 0
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              zoom: {
-                pan: { enabled: true, mode: 'x' },
-                zoom: { wheel: { enabled: true }, mode: 'x' }
-              },
-              legend: { labels: { color: "#fff" } }
-            },
-            scales: {
-              x: { ticks: { color: '#aaa' } },
-              y: { ticks: { color: '#aaa' } }
-            }
-          }
-        });
-      } else {
-        Plotly.newPlot('plotlyChart', [{
-          x: times,
-          y: smoothed,
-          type: 'scatter',
-          mode: 'lines',
-          line: { color: '#00ffcc' },
-          fill: 'tozeroy',
-          fillcolor: 'rgba(0,255,200,0.1)'
-        }], {
-          plot_bgcolor: '#222',
-          paper_bgcolor: '#222',
-          font: { color: '#eee' },
-          margin: { t: 30, b: 40 },
-          xaxis: { title: 'Orario' },
-          yaxis: { title: 'Temp (°C)' }
-        });
-      }
-    }
+    let chart, csvData, originalData = [], times = [], ciclo = [], lastCSV = '', currentChartLibrary = 'plotly';
 
     function smoothData(data, window = 34) {
       return data.map((_, i, arr) => {
@@ -143,82 +53,169 @@
       });
     }
 
-    function parseTurno(date) {
-      const h = date.getHours();
-      if (h >= 6 && h < 14) return 'Turno 1';
-      if (h >= 14 && h < 22) return 'Turno 2';
-      return 'Turno 3';
+    function toggleChartLibrary() {
+      currentChartLibrary = document.getElementById('chartLibrary').value;
+      updateChart();
     }
 
-    let originalData = [];
-    let times = [];
-    let ciclo = [];
+    function getTurno(date) {
+      const hour = date.getHours();
+      if (hour >= 6 && hour < 14) return 'A';
+      if (hour >= 14 && hour < 22) return 'B';
+      return 'C';
+    }
+
+    function updateChart() {
+      if (!times.length || !originalData.length) return;
+      const filtroTurno = document.getElementById('filterTurno').value;
+      const smoothed = smoothData(originalData);
+      const anomalie = [], tempi = [], turniData = { A: [], B: [], C: [] }, scartiTurno = { A: 0, B: 0, C: 0 };
+
+      for (let i = 1; i < times.length; i++) {
+        if (ciclo[i] === 'ok') {
+          const delta = (times[i] - times[i - 1]) / 1000; // secondi
+          tempi.push(delta);
+          const turno = getTurno(times[i]);
+          turniData[turno].push({ tempo: delta, index: i });
+        } else if (ciclo[i] === 'scarto') {
+          const turno = getTurno(times[i - 1]);
+          scartiTurno[turno]++;
+        }
+      }
+
+      const medioVal = tempi.length ? tempi.reduce((a, b) => a + b) / tempi.length : 0;
+      const medio = medioVal.toFixed(1);
+
+      for (let i = 1; i < times.length; i++) {
+        if (ciclo[i] === 'ok') {
+          const delta = (times[i] - times[i - 1]) / 1000;
+          if (delta > medioVal * 1.5) anomalie.push(i);
+        }
+      }
+
+      const riassuntoTurni = Object.entries(turniData).map(([turno, entries]) => {
+        const buoni = entries.length - scartiTurno[turno];
+        const scarti = scartiTurno[turno];
+        const eff = entries.length ? (buoni / entries.length) * 100 : 0;
+
+        const primo = entries.length ? times[entries[0].index] : null;
+        const ultimo = entries.length ? times[entries[entries.length - 1].index] : null;
+        const durata = primo && ultimo ? (ultimo - primo) / 1000 : 0; // in secondi
+        const mediaTempo = buoni > 0 ? (durata / buoni).toFixed(1) : '-';
+
+        return { turno, buoni, scarti, eff, mediaTempo };
+      });
+
+      const best = riassuntoTurni.reduce((a, b) => (b.eff > a.eff ? b : a), { eff: -1 });
+
+      document.getElementById('summary').innerHTML = `
+        <ul>
+          <li><b>Media tempo ciclo:</b> ${medio} sec</li>
+          <li><b>Cicli anomali:</b> ${anomalie.length}</li>
+          <li><b>Turno migliore:</b> Turno ${best.turno} (${best.eff.toFixed(1)}% efficienza)</li>
+        </ul>`;
+
+      document.getElementById('tableTurni').innerHTML = `
+        <thead><tr><th>Turno</th><th>Buoni</th><th>Scarti</th><th>Efficienza %</th><th>Media ciclo (sec)</th></tr></thead>
+        <tbody>
+          ${riassuntoTurni.map(r => `<tr><td>${r.turno}</td><td>${r.buoni}</td><td>${r.scarti}</td><td>${r.eff.toFixed(1)}</td><td>${r.mediaTempo}</td></tr>`).join('')}
+        </tbody>`;
+
+      if (currentChartLibrary === 'chartjs') {
+        document.getElementById('plotlyChart').style.display = 'none';
+        document.getElementById('chart').style.display = 'block';
+      } else {
+        document.getElementById('chart').style.display = 'none';
+        document.getElementById('plotlyChart').style.display = 'block';
+
+        const okMarkers = times.map((t, i) => (ciclo[i] === 'ok' && (filtroTurno === 'all' || getTurno(t) === filtroTurno)) ? smoothed[i] : null);
+        const scartoMarkers = times.map((t, i) => (ciclo[i] === 'scarto' && (filtroTurno === 'all' || getTurno(t) === filtroTurno)) ? smoothed[i] : null);
+        const anomaliaMarkers = times.map((t, i) => (anomalie.includes(i) && (filtroTurno === 'all' || getTurno(times[i]) === filtroTurno)) ? smoothed[i] : null);
+
+        Plotly.react('plotlyChart', [
+          {
+            x: times,
+            y: smoothed,
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#00ffcc' },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(0,255,200,0.1)',
+            name: 'Temperatura'
+          },
+          {
+            x: times,
+            y: okMarkers,
+            mode: 'markers',
+            type: 'scatter',
+            marker: { color: 'lime', size: 8 },
+            name: 'Ciclo OK'
+          },
+          {
+            x: times,
+            y: scartoMarkers,
+            mode: 'markers',
+            type: 'scatter',
+            marker: { color: 'red', size: 8 },
+            name: 'Scarto'
+          },
+          {
+            x: times,
+            y: anomaliaMarkers,
+            mode: 'markers',
+            type: 'scatter',
+            marker: { color: 'yellow', size: 8 },
+            name: 'Anomalia'
+          }
+        ], {
+          plot_bgcolor: '#222',
+          paper_bgcolor: '#222',
+          font: { color: '#eee' },
+          margin: { t: 30, b: 40 },
+          xaxis: { title: 'Orario' },
+          yaxis: { title: 'Temp (°C)', range: [350, 400] }
+        });
+
+        Plotly.newPlot('istogrammaTurni', [{
+          x: riassuntoTurni.map(r => r.turno),
+          y: riassuntoTurni.map(r => r.eff),
+          type: 'bar',
+          marker: { color: ['#0f0', '#ff0', '#f00'] },
+          name: 'Efficienza %'
+        }], {
+          title: 'Efficienza per Turno',
+          plot_bgcolor: '#222',
+          paper_bgcolor: '#222',
+          font: { color: '#eee' },
+          xaxis: { title: 'Turno' },
+          yaxis: { title: 'Efficienza (%)' }
+        });
+      }
+    }
 
     function loadData() {
-      Papa.parse(url, {
+      Papa.parse('https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1', {
         download: true,
         header: true,
         complete: res => {
-          csvData = res.data.filter(r => {
-            if (!r.Timestamp || !r["Temp1 (°C)"]) return false;
+          const newCSV = JSON.stringify(res.data);
+          if (newCSV === lastCSV) return;
+          lastCSV = newCSV;
+
+          csvData = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
+          times = csvData.map(r => {
             const [mdy, time] = r.Timestamp.split(" ");
             const [month, day, year] = mdy.split("/");
-            const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${time}`;
-            const date = new Date(iso);
-            const dateStart = document.getElementById('dateStart').value;
-            const dateEnd = document.getElementById('dateEnd').value;
-            const shift = document.getElementById('shift').value;
-            if (dateStart && date < new Date(dateStart)) return false;
-            if (dateEnd && date > new Date(dateEnd + 'T23:59:59')) return false;
-            if (shift) {
-              const h = date.getHours();
-              if ((shift === 'Turno 1' && (h < 6 || h >= 14)) ||
-                  (shift === 'Turno 2' && (h < 14 || h >= 22)) ||
-                  (shift === 'Turno 3' && (h >= 6 && h < 22))) {
-                return false;
-              }
-            }
-            r._parsedDate = date;
-            return true;
+            return new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${time}`);
           });
-          times = csvData.map(r => r._parsedDate);
-          originalData = csvData.map(r => parseFloat(r["Temp1 (°C)"]));
+          originalData = csvData.map(r => parseFloat(r["Temp1 (°C)"])).filter(val => !isNaN(val));
           ciclo = csvData.map(r => r.Ciclo || "");
           updateChart();
         }
       });
     }
 
-    function applyThresholds() {
-      const min = parseFloat(document.getElementById('minTemp').value);
-      const max = parseFloat(document.getElementById('maxTemp').value);
-      updateChart(min, max);
-    }
-
-    function exportCSV() {
-      const csv = Papa.unparse(csvData);
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'dati_produzione.csv';
-      a.click();
-    }
-
-    function exportPDF() {
-      import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js').then(jsPDF => {
-        const { jsPDF: PDF } = jsPDF;
-        const pdf = new PDF();
-        pdf.text("Report Produzione - NEW OLEF", 10, 10);
-        pdf.html(document.body, {
-          x: 10,
-          y: 20,
-          callback: () => pdf.save('report_produzione.pdf')
-        });
-      });
-    }
-
     loadData();
-    setInterval(loadData, 10000);
   </script>
 </body>
 </html>
