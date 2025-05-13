@@ -61,7 +61,7 @@
 </select>
 <button class="btn" onclick="loadData()">🔍 Applica Filtri</button>
 
-$1
+
       <div id="summary"></div>
       <div id="turni"></div>
     </section>
@@ -104,8 +104,8 @@ $1
         complete: res => {
           csvData = res.data.filter(r => {
   if (!r.Timestamp || !r["Temp1 (°C)"]) return false;
-  const [month, day, timePart] = r.Timestamp.split("/");
-  const [year, time] = timePart.split(" ");
+  const [mdy, time] = r.Timestamp.split(" ");
+  const [month, day, year] = mdy.split("/");
   const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${time}`;
   const date = new Date(iso);
   const dateStart = document.getElementById('dateStart').value;
