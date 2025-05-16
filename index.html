@@ -11,9 +11,10 @@
     #summary ul { list-style: none; padding: 0; }
     #summary li { margin: 0.3rem 0; }
     #controls { margin: 1rem 0; }
-    #tableTurni { width: 100%; margin-top: 1rem; border-collapse: collapse; }
-    #tableTurni th, #tableTurni td { border: 1px solid #666; padding: 0.5rem; text-align: center; }
-    #targetBox { margin-bottom: 1rem; }
+    #tableTurni, #causaliTable { width: 100%; margin-top: 1rem; border-collapse: collapse; }
+    #tableTurni th, #tableTurni td, #causaliTable th, #causaliTable td {
+      border: 1px solid #666; padding: 0.5rem; text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -30,6 +31,7 @@
   <table id="tableTurni"></table>
   <div id="plotlyChart" style="width: 100%; height: 400px;"></div>
   <div id="istogrammaTurni" style="width: 100%; height: 350px;"></div>
+  <table id="causaliTable"></table>
 
   <script>
     let csvData, originalData = [], times = [], ciclo = [], lastCSV = '';
@@ -37,7 +39,7 @@
     function smoothData(data, window = 34) {
       return data.map((_, i, arr) => {
         const slice = arr.slice(Math.max(0, i - window + 1), i + 1);
-        return slice.reduce((sum, val) => sum + val, 0) / slice.length;
+        return parseFloat((slice.reduce((sum, val) => sum + val, 0) / slice.length).toFixed(2));
       });
     }
 
@@ -66,136 +68,143 @@
       const cicloF = datiFiltrati.map(d => d.ciclo);
       const smoothed = smoothData(dataF);
 
-      const anomalie = [], tempi = [], turniData = { A: [], B: [], C: [] }, scartiTurno = { A: 0, B: 0, C: 0 };
+      const turniData = { A: [], B: [], C: [] };
+      const scartiTurno = { A: 0, B: 0, C: 0 };
+      const scartiCausali = { 1: 0, 2: 0, 3: 0 };
+      const fermiCausali = { 4: 0, 5: 0, 6: 0 };
 
-      for (let i = 1; i < timesF.length; i++) {
-        if (cicloF[i] === 'ok') {
-          const delta = (timesF[i] - timesF[i - 1]) / 1000;
-          tempi.push(delta);
-          const turno = getTurno(timesF[i]);
-          turniData[turno].push({ tempo: delta, index: i });
-        } else if (cicloF[i] === 'scarto') {
-          const turno = getTurno(timesF[i - 1]);
+      const okMarkers = [];
+      const scartoMarkers = [];
+      const fermoAree = [];
+      let inFermo = false;
+      let fermoStartTime = null;
+
+      for (let i = 0; i < timesF.length; i++) {
+        const turno = getTurno(timesF[i]);
+        const c = cicloF[i];
+
+        if (c === 'ok') {
+          okMarkers.push({ x: timesF[i], y: smoothed[i] });
+          const delta = i > 0 ? (timesF[i] - timesF[i - 1]) / 1000 : 0;
+          turniData[turno].push({ index: i, tempo: delta });
+        } else if (['1', '2', '3'].includes(c)) {
+          scartoMarkers.push({ x: timesF[i], y: smoothed[i], label: c });
           scartiTurno[turno]++;
+          scartiCausali[c]++;
+        } 
+
+        if (!inFermo && typeof c === 'string' && c.trim().toLowerCase() === 'fermo') {
+          inFermo = true;
+          fermoStartTime = timesF[i];
+        } else if (inFermo && ['4', '5', '6'].includes(c)) {
+          fermiCausali[c]++;
+          fermoAree.push({ x0: fermoStartTime, x1: timesF[i], causale: c });
+          inFermo = false;
+          fermoStartTime = null;
         }
       }
 
-      const medioVal = tempi.length ? tempi.reduce((a, b) => a + b) / tempi.length : 0;
-      const medio = medioVal.toFixed(1);
-      for (let i = 1; i < timesF.length; i++) {
-        if (cicloF[i] === 'ok') {
-          const delta = (timesF[i] - timesF[i - 1]) / 1000;
-          if (delta > medioVal * 1.5) anomalie.push(i);
-        }
-      }
+      const shapes = fermoAree.map(area => ({
+        type: 'rect', xref: 'x', yref: 'paper', x0: area.x0, x1: area.x1, y0: 0, y1: 1,
+        fillcolor: 'rgba(255,255,0,0.3)', line: { width: 0 },
+        name: `Fermo Causale ${area.causale}`
+      }));
 
-      const totBuoni = Object.values(turniData).reduce((s, t) => s + t.length, 0) - Object.values(scartiTurno).reduce((s, v) => s + v, 0);
+      const annotations = fermoAree.map(area => ({
+        x: area.x1,
+        y: 1.05,
+        xref: 'x',
+        yref: 'paper',
+        text: `Causale ${area.causale}`,
+        showarrow: false,
+        font: { color: '#ff0', size: 10 }
+      }));
+
       const riassuntoTurni = Object.entries(turniData).map(([turno, entries]) => {
-        const buoni = entries.length - scartiTurno[turno];
+        const buoni = entries.length;
         const scarti = scartiTurno[turno];
-        const qualita = entries.length ? (buoni / entries.length) * 100 : 0;
+        const cicloTotale = buoni + scarti;
+        const qualita = cicloTotale > 0 ? (buoni / cicloTotale) * 100 : 0;
         const produttivita = target > 0 ? (buoni / (target / 3)) * 100 : 0;
-        const oee = (qualita * produttivita) / 100; // disponibilità al 100%
-        const primo = entries.length ? timesF[entries[0].index] : null;
-        const ultimo = entries.length ? timesF[entries[entries.length - 1].index] : null;
-        const durata = primo && ultimo ? (ultimo - primo) / 1000 : 0;
-        const mediaTempo = buoni > 0 ? (durata / buoni).toFixed(1) : '-';
-        return { turno, buoni, scarti, qualita, produttivita, oee, mediaTempo };
+
+        const inizioTurno = new Date(inizioGiorno);
+        if (turno === 'B') inizioTurno.setHours(14);
+        if (turno === 'C') inizioTurno.setHours(22);
+        const fineTurno = new Date(inizioTurno.getTime() + 8 * 60 * 60 * 1000);
+
+        const fermoNelTurno = fermoAree
+          .filter(f => f.x0 >= inizioTurno && f.x1 <= fineTurno)
+          .reduce((acc, f) => acc + (f.x1 - f.x0), 0);
+        const disponibilita = 100 * ((8 * 3600 * 1000 - fermoNelTurno) / (8 * 3600 * 1000));
+
+        const tempoDisponibile = (8 * 3600) - (fermoNelTurno / 1000);
+        const mediaTempo = cicloTotale > 0 ? (tempoDisponibile / cicloTotale).toFixed(1) : '-';
+        const oee = (qualita * produttivita * disponibilita) / 10000;
+
+        return { turno, buoni, scarti, qualita, produttivita, disponibilita, oee, mediaTempo };
       });
 
-      document.getElementById('summary').innerHTML = `
-        <ul>
-          <li><b>Media tempo ciclo:</b> ${medio} sec</li>
-          <li><b>Cicli anomali:</b> ${anomalie.length}</li>
-        </ul>`;
-
+      document.getElementById('summary').innerHTML = '';
       document.getElementById('tableTurni').innerHTML = `
-        <thead><tr><th>Turno</th><th>Buoni</th><th>Scarti</th><th>Qualità %</th><th>Produttività %</th><th>OEE %</th><th>Media ciclo (sec)</th></tr></thead>
+        <thead><tr><th>Turno</th><th>Buoni</th><th>Scarti</th><th>Qualità %</th><th>Produttività %</th><th>Disponibilità %</th><th style="font-weight:bold; min-width:100px;">OEE %</th><th>Media ciclo (sec)</th></tr></thead>
         <tbody>
-          ${riassuntoTurni.map(r => `<tr><td>${r.turno}</td><td>${r.buoni}</td><td>${r.scarti}</td><td>${r.qualita.toFixed(1)}</td><td>${r.produttivita.toFixed(1)}</td><td>${r.oee.toFixed(1)}</td><td>${r.mediaTempo}</td></tr>`).join('')}
+          ${riassuntoTurni.map(r => `<tr><td>${r.turno}</td><td>${r.buoni}</td><td>${r.scarti}</td><td>${r.qualita.toFixed(1)}</td><td>${r.produttivita.toFixed(1)}</td><td>${r.disponibilita.toFixed(1)}</td><td><b>${r.oee.toFixed(1)}</b></td><td>${r.mediaTempo}</td></tr>`).join('')}
         </tbody>`;
-
-      const okMarkers = timesF.map((t, i) => cicloF[i] === 'ok' ? smoothed[i] : null);
-      const scartoMarkers = timesF.map((t, i) => cicloF[i] === 'scarto' ? smoothed[i] : null);
-      const anomaliaMarkers = timesF.map((t, i) => anomalie.includes(i) ? smoothed[i] : null);
 
       Plotly.react('plotlyChart', [
         {
           x: timesF,
           y: smoothed,
-          type: 'scatter',
-          mode: 'lines',
-          line: { color: '#00ffcc' },
-          fill: 'tozeroy',
-          fillcolor: 'rgba(0,255,200,0.1)',
-          name: 'Temperatura'
+          type: 'scatter', mode: 'lines', name: 'Temperatura',
+          line: { color: '#00ffcc', shape: 'spline' }, fill: 'tozeroy', fillcolor: 'rgba(0,255,200,0.1)'
         },
         {
-          x: timesF,
-          y: okMarkers,
-          mode: 'markers',
-          type: 'scatter',
-          marker: { color: 'lime', size: 8 },
-          name: 'Ciclo OK'
+          x: okMarkers.map(p => p.x),
+          y: okMarkers.map(p => Math.round(p.y)),
+          mode: 'markers', type: 'scatter', marker: { color: 'lime', size: 8 }, name: 'Ciclo OK'
         },
         {
-          x: timesF,
-          y: scartoMarkers,
-          mode: 'markers',
+          x: scartoMarkers.map(p => p.x),
+          y: scartoMarkers.map(p => Math.round(p.y)),
+          mode: 'markers+text',
           type: 'scatter',
           marker: { color: 'red', size: 8 },
+          text: scartoMarkers.map(p => p.label),
+          textposition: 'bottom center',
           name: 'Scarto'
-        },
-        {
-          x: timesF,
-          y: anomaliaMarkers,
-          mode: 'markers',
-          type: 'scatter',
-          marker: { color: 'yellow', size: 8 },
-          name: 'Anomalia'
-        }
-      ], {
-        plot_bgcolor: '#222',
-        paper_bgcolor: '#222',
-        font: { color: '#eee' },
+        }], {
+        plot_bgcolor: '#222', paper_bgcolor: '#222', font: { color: '#eee' },
         margin: { t: 30, b: 40 },
-        xaxis: {
-          title: 'Orario',
-          type: 'date',
-          range: [inizioGiorno.getTime(), fineGiorno.getTime()],
-          autorange: false
-        },
-        yaxis: { title: 'Temp (°C)', range: [350, 400] }
+        xaxis: { title: 'Orario', type: 'date', range: [inizioGiorno.getTime(), fineGiorno.getTime()], autorange: false },
+        yaxis: { title: 'Temp (°C)', range: [350, 400] },
+        shapes,
+        annotations
       });
 
       Plotly.newPlot('istogrammaTurni', [
         {
-          x: riassuntoTurni.map(r => r.turno),
-          y: riassuntoTurni.map(r => r.qualita),
-          type: 'bar',
-          name: 'Qualità %'
+          x: riassuntoTurni.map(r => r.turno), y: riassuntoTurni.map(r => r.qualita), type: 'bar', name: 'Qualità %'
         },
         {
-          x: riassuntoTurni.map(r => r.turno),
-          y: riassuntoTurni.map(r => r.produttivita),
-          type: 'bar',
-          name: 'Produttività %'
+          x: riassuntoTurni.map(r => r.turno), y: riassuntoTurni.map(r => r.produttivita), type: 'bar', name: 'Produttività %'
         },
         {
-          x: riassuntoTurni.map(r => r.turno),
-          y: riassuntoTurni.map(r => r.oee),
-          type: 'bar',
-          name: 'OEE %'
-        }
-      ], {
-        barmode: 'group',
-        title: 'Indicatori per Turno',
-        plot_bgcolor: '#222',
-        paper_bgcolor: '#222',
-        font: { color: '#eee' },
-        xaxis: { title: 'Turno' },
-        yaxis: { title: 'Percentuale (%)' }
+          x: riassuntoTurni.map(r => r.turno), y: riassuntoTurni.map(r => r.disponibilita), type: 'bar', name: 'Disponibilità %'
+        },
+        {
+          x: riassuntoTurni.map(r => r.turno), y: riassuntoTurni.map(r => r.oee), type: 'bar', name: 'OEE %'
+        }], {
+        barmode: 'group', title: 'Indicatori per Turno', plot_bgcolor: '#222', paper_bgcolor: '#222',
+        font: { color: '#eee' }, xaxis: { title: 'Turno' }, yaxis: { title: 'Percentuale (%)', autorange: true }
       });
+
+      document.getElementById('causaliTable').innerHTML = `
+        <thead><tr><th>Causale Scarto</th><th>Quantità</th></tr></thead>
+        <tbody>
+          ${Object.entries(scartiCausali).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}
+          <tr><th>Causale Fermo</th><th>Quantità</th></tr>
+          ${Object.entries(fermiCausali).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}
+        </tbody>`;
     }
 
     function loadData() {
@@ -225,3 +234,4 @@
   </script>
 </body>
 </html>
+
