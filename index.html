@@ -102,6 +102,60 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
             height: 450px;
+            position: relative;
+        }
+
+        .legend-replacement {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            min-width: 200px;
+        }
+
+        .legend-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #00d4ff;
+        }
+
+        .legend-charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .mini-chart {
+            text-align: center;
+        }
+
+        .mini-chart-title {
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .donut-chart {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 5px;
+            position: relative;
+        }
+
+        .donut-chart svg {
+            transform: rotate(-90deg);
+        }
+
+        .donut-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
         }
 
         .turni-grid {
@@ -349,53 +403,18 @@
         .efficiency-heatmap {
             display: grid;
             grid-template-columns: repeat(24, 1fr);
-            gap: 3px;
+            gap: 2px;
             margin-top: 15px;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
         }
 
         .hour-cell {
             aspect-ratio: 1;
-            border-radius: 4px;
+            border-radius: 2px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 10px;
             font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .hour-cell:hover {
-            transform: scale(1.1);
-            z-index: 1;
-            border: 1px solid #fff;
-        }
-
-        .heatmap-legend {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 10px;
-            font-size: 0.8em;
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .legend-gradient {
-            flex: 1;
-            height: 8px;
-            margin: 0 10px;
-            border-radius: 4px;
-            background: linear-gradient(to right, 
-                #d32f2f 0%,     /* Rosso scuro */
-                #f57c00 25%,    /* Arancione */
-                #fbc02d 50%,    /* Giallo */
-                #689f38 75%,    /* Verde chiaro */
-                #2e7d32 100%    /* Verde scuro */
-            );
         }
 
         .alert {
@@ -552,7 +571,7 @@
                 </div>
                 <div class="filter-group">
                     <label for="targetInput">Target Giornaliero:</label>
-                    <input type="number" id="targetInput" value="210" min="1">
+                    <input type="number" id="targetInput" value="100" min="1">
                 </div>
                 <button class="btn" onclick="updateChart()">🔄 Aggiorna Analisi</button>
             </div>
@@ -639,6 +658,21 @@
         <main class="main-content">
             <div class="chart-container">
                 <div id="tempChart"></div>
+                <div class="legend-replacement">
+                    <div class="legend-title">📊 Distribuzione Problemi</div>
+                    <div class="legend-charts">
+                        <div class="mini-chart">
+                            <div class="mini-chart-title">Scarti</div>
+                            <div class="donut-chart" id="miniScarti"></div>
+                            <div class="donut-value" id="totalScartiMini">--</div>
+                        </div>
+                        <div class="mini-chart">
+                            <div class="mini-chart-title">Fermi</div>
+                            <div class="donut-chart" id="miniFermi"></div>
+                            <div class="donut-value" id="totalFermiMini">--</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="loading" id="loading">
                     <div class="spinner"></div>
                     <p>Caricamento dati produzione...</p>
@@ -703,7 +737,7 @@
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-value" id="mtbf">--h</div>
-                        <div class="kpi-label">MTBF - Fermi >4h</div>
+                        <div class="kpi-label">MTBF (Mean Time Between Failures)</div>
                         <div class="kpi-change" id="mtbfChange">
                             <span>--</span>
                         </div>
@@ -748,9 +782,9 @@
                     </div>
 
                     <div class="analysis-card">
-                        <div class="analysis-title">⚡ Efficienza Oraria - Vista 24h</div>
+                        <div class="analysis-title">⚡ Analisi Efficienza Oraria</div>
                         <div style="font-size: 0.9em; margin-bottom: 10px; color: rgba(255,255,255,0.8);">
-                            Mappa termica prestazioni per ora del giorno
+                            Heatmap ore più/meno efficienti
                         </div>
                         <div class="efficiency-heatmap" id="efficiencyHeatmap"></div>
                     </div>
@@ -967,62 +1001,46 @@
             return 'C';
         }
 
-        // Crea heatmap efficienza oraria con gradiente
+        // Crea mini donut chart
+        function createMiniDonut(containerId, value, total, color) {
+            const container = document.getElementById(containerId);
+            const percentage = total > 0 ? (value / total) * 100 : 0;
+            const circumference = 2 * Math.PI * 20;
+            const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
+            
+            container.innerHTML = `
+                <svg width="60" height="60" viewBox="0 0 50 50">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="4"/>
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="${color}" stroke-width="4" 
+                            stroke-dasharray="${strokeDasharray}" stroke-linecap="round"/>
+                </svg>
+            `;
+        }
+
+        // Crea heatmap efficienza oraria
         function createEfficiencyHeatmap(hourlyData) {
             const heatmapContainer = document.getElementById('efficiencyHeatmap');
             let html = '';
             
             for (let hour = 0; hour < 24; hour++) {
                 const efficiency = hourlyData[hour] || 0;
-                let color;
+                let color = '#2c3e50';
+                let text = hour.toString().padStart(2, '0');
                 
-                // Gradiente di colori basato sull'efficienza
-                if (efficiency >= 90) {
-                    color = '#2e7d32'; // Verde scuro
-                } else if (efficiency >= 75) {
-                    color = '#689f38'; // Verde chiaro
-                } else if (efficiency >= 60) {
-                    color = '#fbc02d'; // Giallo
-                } else if (efficiency >= 40) {
-                    color = '#f57c00'; // Arancione
-                } else if (efficiency >= 20) {
-                    color = '#e65100'; // Rosso chiaro
+                if (efficiency > 80) {
+                    color = '#2ecc71';
+                } else if (efficiency > 60) {
+                    color = '#f39c12';
+                } else if (efficiency > 40) {
+                    color = '#e67e22';
                 } else if (efficiency > 0) {
-                    color = '#d32f2f'; // Rosso scuro
-                } else {
-                    color = '#424242'; // Grigio (nessun dato)
+                    color = '#e74c3c';
                 }
                 
-                const displayHour = hour.toString().padStart(2, '0');
-                html += `<div class="hour-cell" style="background-color: ${color}; color: white;" 
-                         title="Ora ${displayHour}:00-${displayHour}:59 - Efficienza: ${efficiency.toFixed(1)}% - ${getEfficiencyLabel(efficiency)}">${displayHour}</div>`;
+                html += `<div class="hour-cell" style="background-color: ${color}; color: white;" title="Ora ${hour}:00 - Efficienza: ${efficiency.toFixed(1)}%">${text}</div>`;
             }
             
-            // Aggiungi la legenda
-            html += `
-                <div style="grid-column: 1 / -1;">
-                    <div class="heatmap-legend">
-                        <span>0%</span>
-                        <div class="legend-gradient"></div>
-                        <span>100%</span>
-                    </div>
-                    <div style="text-align: center; margin-top: 5px; font-size: 0.8em; color: rgba(255,255,255,0.6);">
-                        Efficienza per Ora: Rosso=Bassa, Giallo=Media, Verde=Alta
-                    </div>
-                </div>
-            `;
-            
             heatmapContainer.innerHTML = html;
-        }
-
-        // Etichetta efficienza
-        function getEfficiencyLabel(efficiency) {
-            if (efficiency >= 90) return 'ECCELLENTE';
-            if (efficiency >= 75) return 'BUONA';
-            if (efficiency >= 60) return 'MEDIA';
-            if (efficiency >= 40) return 'BASSA';
-            if (efficiency > 0) return 'CRITICA';
-            return 'NESSUN DATO';
         }
 
         // === INIZIALIZZAZIONE PLOTLY ===
@@ -1268,7 +1286,6 @@
                 }
 
                 console.log('✅ Dati filtrati:', datiFiltrati.length, 'punti');
-                console.log('📊 OEE PROPORZIONALE: Ore lavorate =', (timesF[timesF.length-1] - inizioGiorno)/(1000*60*60), 'h - Target adeguato automaticamente');
 
                 const timesF = datiFiltrati.map(d => d.time);
                 const dataF = datiFiltrati.map(d => d.temp);
@@ -1463,11 +1480,10 @@
 
                 Plotly.react('tempChart', traces, layout, config);
 
-                // Calcola e aggiorna metriche CON ora corrente per OEE proporzionale
-                const oraCorrente = new Date(); // Ora attuale per calcolo proporzionale
-                const riassuntoTurni = calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree, oraCorrente);
+                // Calcola e aggiorna metriche
+                const riassuntoTurni = calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree);
                 updateAllDisplays(riassuntoTurni, scartiCausali, fermiCausali, datiFiltrati.length, giornoInput, target);
-                updateAdvancedAnalytics(riassuntoTurni, scartiCausali, fermiCausali, hourlyEfficiency, target, fermoAree);
+                updateAdvancedAnalytics(riassuntoTurni, scartiCausali, fermiCausali, hourlyEfficiency, target);
 
                 console.log('✅ Grafico aggiornato');
 
@@ -1478,88 +1494,66 @@
 
         // === FUNZIONI DI SUPPORTO ===
         
-        function calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree, oraCorrente) {
+        function calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree) {
             return Object.entries(turniData).map(([turno, entries]) => {
                 const buoni = entries.length;
                 const scarti = scartiTurno[turno];
                 const cicloTotale = buoni + scarti;
                 const qualita = cicloTotale > 0 ? (buoni / cicloTotale) * 100 : 0;
+                const produttivita = target > 0 ? (buoni / (target / 3)) * 100 : 0;
 
-                // Calcolo ore effettivamente trascorse per questo turno
                 const inizioTurno = new Date(inizioGiorno);
                 if (turno === 'B') inizioTurno.setHours(14);
                 if (turno === 'C') inizioTurno.setHours(22);
                 const fineTurno = new Date(inizioTurno.getTime() + 8 * 60 * 60 * 1000);
-                
-                // Considera solo le ore effettivamente trascorse
-                const fineEffettiva = oraCorrente < fineTurno ? oraCorrente : fineTurno;
-                const oreTurnoTrascorse = Math.max(0, (fineEffettiva - inizioTurno) / (1000 * 60 * 60));
-                
-                // Target proporzionale alle ore trascorse (invece di fisso per turno)
-                const targetTurno = oreTurnoTrascorse > 0 ? (target / 3) * (oreTurnoTrascorse / 8) : 0;
-                const produttivita = targetTurno > 0 ? (buoni / targetTurno) * 100 : 0;
 
                 const fermoNelTurno = fermoAree
-                    .filter(f => (f.x0 >= inizioTurno && f.x0 < fineEffettiva) || 
-                                 (f.x1 > inizioTurno && f.x1 <= fineEffettiva) || 
-                                 (f.x0 < inizioTurno && f.x1 > fineEffettiva))
+                    .filter(f => (f.x0 >= inizioTurno && f.x0 < fineTurno) || 
+                                 (f.x1 > inizioTurno && f.x1 <= fineTurno) || 
+                                 (f.x0 < inizioTurno && f.x1 > fineTurno))
                     .reduce((acc, f) => {
                         const startTime = Math.max(f.x0.getTime(), inizioTurno.getTime());
-                        const endTime = Math.min(f.x1.getTime(), fineEffettiva.getTime());
-                        return acc + Math.max(0, endTime - startTime);
+                        const endTime = Math.min(f.x1.getTime(), fineTurno.getTime());
+                        return acc + (endTime - startTime);
                     }, 0);
 
-                const tempoTotaleDisponibile = oreTurnoTrascorse * 60 * 60 * 1000;
-                const disponibilita = tempoTotaleDisponibile > 0 ? 
-                    100 * ((tempoTotaleDisponibile - fermoNelTurno) / tempoTotaleDisponibile) : 100;
-                
+                const disponibilita = 100 * ((8 * 3600 * 1000 - fermoNelTurno) / (8 * 3600 * 1000));
                 const oee = (qualita * produttivita * disponibilita) / 10000;
 
                 return { 
                     turno, buoni, scarti, qualita, produttivita, disponibilita, oee, 
-                    fermoTempo: Math.round(fermoNelTurno / 60000),
-                    oreTurnoTrascorse: oreTurnoTrascorse.toFixed(1),
-                    targetTurno: targetTurno.toFixed(0)
+                    fermoTempo: Math.round(fermoNelTurno / 60000) 
                 };
             });
         }
 
         function updateAllDisplays(riassuntoTurni, scartiCausali, fermiCausali, dataPointsCount, giornoInput, target) {
-            // Aggiorna turni CON info ore trascorse
+            // Aggiorna turni
             riassuntoTurni.forEach(r => {
                 const turno = r.turno;
                 document.getElementById(`buoni${turno}`).textContent = r.buoni;
                 document.getElementById(`scarti${turno}`).textContent = r.scarti;
                 document.getElementById(`qualita${turno}`).textContent = r.qualita.toFixed(1) + '%';
-                
-                // Mostra produttività con info ore se rilevante
-                const prodText = r.oreTurnoTrascorse > 0 && r.oreTurnoTrascorse < 8 ? 
-                    `${r.produttivita.toFixed(1)}% (${r.oreTurnoTrascorse}h)` : 
-                    `${r.produttivita.toFixed(1)}%`;
-                document.getElementById(`produttivita${turno}`).textContent = prodText;
-                
+                document.getElementById(`produttivita${turno}`).textContent = r.produttivita.toFixed(1) + '%';
                 document.getElementById(`disponibilita${turno}`).textContent = r.disponibilita.toFixed(1) + '%';
                 document.getElementById(`fermi${turno}`).textContent = r.fermoTempo + ' min';
                 document.getElementById(`oee${turno}`).textContent = r.oee.toFixed(1) + '%';
             });
 
-            // Calcola totali e medie CORRETTE
+            // Aggiorna produzione
             const totalBuoni = riassuntoTurni.reduce((sum, r) => sum + r.buoni, 0);
             const totalScarti = riassuntoTurni.reduce((sum, r) => sum + r.scarti, 0);
-            
-            // Media pesata per ore effettive, non aritmetica
-            const oreTotali = riassuntoTurni.reduce((sum, r) => sum + parseFloat(r.oreTurnoTrascorse || 0), 0);
-            const qualitaMedia = riassuntoTurni.reduce((sum, r) => sum + (r.qualita * parseFloat(r.oreTurnoTrascorse || 0)), 0) / oreTotali;
-            const produttivitaMedia = riassuntoTurni.reduce((sum, r) => sum + (r.produttivita * parseFloat(r.oreTurnoTrascorse || 0)), 0) / oreTotali;
-            const disponibilitaMedia = riassuntoTurni.reduce((sum, r) => sum + (r.disponibilita * parseFloat(r.oreTurnoTrascorse || 0)), 0) / oreTotali;
-            const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + (r.oee * parseFloat(r.oreTurnoTrascorse || 0)), 0) / oreTotali;
+            const qualitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.qualita, 0) / 3;
+            const produttivitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.produttivita, 0) / 3;
+            const disponibilitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.disponibilita, 0) / 3;
+            const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
 
             document.getElementById('totalBuoni').textContent = totalBuoni;
             document.getElementById('totalScarti').textContent = totalScarti;
-            document.getElementById('qualitaMedia').textContent = (qualitaMedia || 0).toFixed(1) + '%';
-            document.getElementById('produttivitaMedia').textContent = (produttivitaMedia || 0).toFixed(1) + '%';
-            document.getElementById('disponibilitaMedia').textContent = (disponibilitaMedia || 0).toFixed(1) + '%';
-            document.getElementById('oeeGiornaliero').textContent = (oeeGiornaliero || 0).toFixed(1) + '%';
+            document.getElementById('qualitaMedia').textContent = qualitaMedia.toFixed(1) + '%';
+            document.getElementById('produttivitaMedia').textContent = produttivitaMedia.toFixed(1) + '%';
+            document.getElementById('disponibilitaMedia').textContent = disponibilitaMedia.toFixed(1) + '%';
+            document.getElementById('oeeGiornaliero').textContent = oeeGiornaliero.toFixed(1) + '%';
 
             // Aggiorna causali
             document.getElementById('scarto1').textContent = scartiCausali['1'] || 0;
@@ -1569,13 +1563,18 @@
             document.getElementById('fermo5').textContent = fermiCausali['5'] || 0;
             document.getElementById('fermo6').textContent = fermiCausali['6'] || 0;
 
+            // Aggiorna mini charts
+            createMiniDonut('miniScarti', totalScarti, totalBuoni + totalScarti, '#ff4757');
+            createMiniDonut('miniFermi', Object.values(fermiCausali).reduce((a, b) => a + b, 0), 10, '#ffa502');
+            document.getElementById('totalScartiMini').textContent = totalScarti;
+            document.getElementById('totalFermiMini').textContent = Object.values(fermiCausali).reduce((a, b) => a + b, 0);
+
             // Aggiorna status
             document.getElementById('currentDay').textContent = `Giorno: ${giornoInput}`;
             document.getElementById('totalProduced').textContent = `Punti: ${dataPointsCount}`;
             document.getElementById('lastUpdate').textContent = `Aggiornato: ${new Date().toLocaleTimeString()}`;
 
-            // Alert produzione CON target proporzionale
-            const targetProporzionale = (target * oreTotali) / 24;
+            // Alert produzione
             const alertsDiv = document.getElementById('productionAlerts');
             let alertsHTML = '';
             
@@ -1589,120 +1588,96 @@
                 alertsHTML = '<div class="alert alert-critical">🚨 OEE CRITICO - Intervento immediato necessario!</div>';
             }
             
-            if (totalBuoni >= targetProporzionale) {
-                alertsHTML += '<div class="alert alert-success">✅ Target proporzionale raggiunto!</div>';
+            if (totalBuoni >= target) {
+                alertsHTML += '<div class="alert alert-success">✅ Target giornaliero raggiunto!</div>';
             } else {
-                const percentageTarget = (totalBuoni / targetProporzionale) * 100;
+                const percentageTarget = (totalBuoni / target) * 100;
                 if (percentageTarget < 70) {
-                    alertsHTML += `<div class="alert alert-danger">❌ Target a rischio: ${percentageTarget.toFixed(1)}% (${totalBuoni}/${targetProporzionale.toFixed(0)})</div>`;
+                    alertsHTML += `<div class="alert alert-danger">❌ Target a rischio: ${percentageTarget.toFixed(1)}% raggiunto</div>`;
                 } else {
-                    alertsHTML += `<div class="alert alert-warning">⚠️ Target in corso: ${percentageTarget.toFixed(1)}% (${totalBuoni}/${targetProporzionale.toFixed(0)})</div>`;
+                    alertsHTML += `<div class="alert alert-warning">⚠️ Target in corso: ${percentageTarget.toFixed(1)}% raggiunto</div>`;
                 }
-            }
-            
-            // Info ore lavorate
-            if (oreTotali < 24) {
-                alertsHTML += `<div class="alert alert-success">📊 Analisi su ${oreTotali.toFixed(1)}h lavorate - Target proporzionale applicato</div>`;
             }
             
             alertsDiv.innerHTML = alertsHTML;
         }
 
-        function updateAdvancedAnalytics(riassuntoTurni, scartiCausali, fermiCausali, hourlyEfficiency, target, fermoAree) {
-            try {
-                // KPI avanzati
-                const totalBuoni = riassuntoTurni.reduce((sum, r) => sum + r.buoni, 0);
-                const totalScarti = riassuntoTurni.reduce((sum, r) => sum + r.scarti, 0);
-                const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
-                
-                // Calcolo costo orario reale
-                const costoOrario = calculateHourlyCost();
-                
-                // Calcoli costi basati sui parametri reali
-                const costoUnitarioScarto = costoOrario * 0.1; // Stima: 6 minuti per gestire uno scarto
-                const costoMinutoFermo = costoOrario / 60;
-                
-                const costoScarti = totalScarti * costoUnitarioScarto;
-                const minUtiFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0) * 30; // 30 min medi per fermo
-                const costoFermi = minUtiFermi * costoMinutoFermo;
-                
-                // Calcolo perdite per mancato raggiungimento target (PROPORZIONALE)
-                const oreTotaliFatte = riassuntoTurni.reduce((sum, r) => sum + parseFloat(r.oreTurnoTrascorse || 0), 0);
-                const targetProporzionale = (target * oreTotaliFatte) / 24; // Target proporzionale alle ore lavorate
-                const pezziMancanti = Math.max(0, targetProporzionale - totalBuoni);
-                const ricavoUnitario = costoOrario * 0.2; // Stima margine 20%
-                const perditeTarget = pezziMancanti * ricavoUnitario;
-                
-                // Aggiorna elementi se esistono
-                const updateElement = (id, value) => {
-                    const element = document.getElementById(id);
-                    if (element) element.textContent = value;
-                };
-                
-                updateElement('costoOrario', `€${costoOrario.toFixed(0)}`);
-                updateElement('costoScarti', `€${costoScarti.toFixed(0)}`);
-                updateElement('costoFermi', `€${costoFermi.toFixed(0)}`);
-                updateElement('perditeTarget', `€${perditeTarget.toFixed(0)}`);
-                
-                // Tempo medio ciclo (basato sui dati reali)
-                const cicliTotali = totalBuoni + totalScarti;
-                const tempoMedioCiclo = cicliTotali > 0 ? (oreTotaliFatte * 3600) / cicliTotali : 0; // in secondi
-                updateElement('tempoMedioCiclo', `${tempoMedioCiclo.toFixed(1)}s`);
-                
-                // Efficienza oraria PROPORZIONALE
-                const efficienzaOraria = targetProporzionale > 0 ? (totalBuoni / targetProporzionale) * 100 : 0;
-                updateElement('efficienzaOraria', `${efficienzaOraria.toFixed(1)}%`);
-                
-                // MTBF realistico - solo fermi >4 ore considerati guasti
-                const gustiVeri = fermoAree.filter(fermo => {
-                    const durataFermo = (fermo.x1.getTime() - fermo.x0.getTime()) / (1000 * 60 * 60); // ore
-                    return durataFermo >= 4;
-                });
-                
-                const mtbf = gustiVeri.length > 0 ? (oreTotaliFatte / gustiVeri.length) : oreTotaliFatte || 24;
-                updateElement('mtbf', `${mtbf.toFixed(1)}h`);
-                
-                // Analisi Pareto
-                const maxScartoKey = Object.keys(scartiCausali).reduce((a, b) => scartiCausali[a] > scartiCausali[b] ? a : b);
-                const maxFermoKey = Object.keys(fermiCausali).reduce((a, b) => fermiCausali[a] > fermiCausali[b] ? a : b);
-                
-                updateElement('mainScartoCause', `Causale ${maxScartoKey} (${scartiCausali[maxScartoKey]} casi)`);
-                updateElement('mainFermoCause', `Causale ${maxFermoKey} (${fermiCausali[maxFermoKey]} casi)`);
-                updateElement('oeeImpact', `${(100 - oeeGiornaliero).toFixed(1)}%`);
-                
-                // Trend (simulato per demo, in produzione verrebbe da database storico)
-                const oeeYesterday = 72 + (Math.random() * 15);
-                const prodYesterday = 88 + (Math.random() * 20);
-                const qualityYesterday = 94 + (Math.random() * 5);
-                
-                const oeeMedia = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
-                const prodMedia = riassuntoTurni.reduce((sum, r) => sum + r.produttivita, 0) / 3;
-                const qualityMedia = riassuntoTurni.reduce((sum, r) => sum + r.qualita, 0) / 3;
-                
-                updateTrendDisplay('oeeVsYesterday', oeeMedia, oeeYesterday);
-                updateTrendDisplay('prodVsYesterday', prodMedia, prodYesterday);
-                updateTrendDisplay('qualityVsYesterday', qualityMedia, qualityYesterday);
-                
-                // Heatmap efficienza
-                createEfficiencyHeatmap(hourlyEfficiency.map(h => (h / 30) * 100));
-                
-                // Benchmark
-                const oeeVsBenchmark = oeeGiornaliero >= 85 ? '✅ Superiore' : oeeGiornaliero >= 60 ? '⚠️ Sotto media' : '❌ Critico';
-                updateElement('oeeVsBenchmark', oeeVsBenchmark);
-                
-                const turniOrdinati = riassuntoTurni.sort((a, b) => b.oee - a.oee);
-                updateElement('turniRanking', `1° ${turniOrdinati[0].turno} (${turniOrdinati[0].oee.toFixed(1)}%)`);
-                updateElement('targetAchieved', `${((totalBuoni / targetProporzionale) * 100).toFixed(1)}%`);
-                
-                // Raccomandazioni basate sui costi reali e MTBF
-                generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi, mtbf, gustiVeri.length);
-                
-                console.log('✅ Analisi avanzate aggiornate - Target proporzionale:', targetProporzionale.toFixed(1), 'su', oreTotaliFatte.toFixed(1), 'ore');
-                
-            } catch (error) {
-                console.error('❌ Errore analisi avanzate:', error);
-                // Non bloccare l'esecuzione, continua con i dati base
-            }
+        function updateAdvancedAnalytics(riassuntoTurni, scartiCausali, fermiCausali, hourlyEfficiency, target) {
+            // KPI avanzati
+            const totalBuoni = riassuntoTurni.reduce((sum, r) => sum + r.buoni, 0);
+            const totalScarti = riassuntoTurni.reduce((sum, r) => sum + r.scarti, 0);
+            const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
+            
+            // Calcolo costo orario reale
+            const costoOrario = calculateHourlyCost();
+            
+            // Calcoli costi basati sui parametri reali
+            const costoUnitarioScarto = costoOrario * 0.1; // Stima: 6 minuti per gestire uno scarto
+            const costoMinutoFermo = costoOrario / 60;
+            
+            const costoScarti = totalScarti * costoUnitarioScarto;
+            const minUtiFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0) * 30; // 30 min medi per fermo
+            const costoFermi = minUtiFermi * costoMinutoFermo;
+            
+            // Calcolo perdite per mancato raggiungimento target
+            const pezziMancanti = Math.max(0, target - totalBuoni);
+            const ricavoUnitario = costoOrario * 0.2; // Stima margine 20%
+            const perditeTarget = pezziMancanti * ricavoUnitario;
+            
+            document.getElementById('costoOrario').textContent = `€${costoOrario.toFixed(0)}`;
+            document.getElementById('costoScarti').textContent = `€${costoScarti.toFixed(0)}`;
+            document.getElementById('costoFermi').textContent = `€${costoFermi.toFixed(0)}`;
+            document.getElementById('perditeTarget').textContent = `€${perditeTarget.toFixed(0)}`;
+            
+            // Tempo medio ciclo (basato sui dati reali)
+            const cicliTotali = totalBuoni + totalScarti;
+            const tempoTotaleProduzione = 8 * 3; // 3 turni da 8 ore
+            const tempoMedioCiclo = cicliTotali > 0 ? (tempoTotaleProduzione * 3600) / cicliTotali : 0; // in secondi
+            document.getElementById('tempoMedioCiclo').textContent = `${tempoMedioCiclo.toFixed(1)}s`;
+            
+            // Efficienza oraria
+            const efficienzaOraria = (totalBuoni / target) * 100;
+            document.getElementById('efficienzaOraria').textContent = `${efficienzaOraria.toFixed(1)}%`;
+            
+            // MTBF - Mean Time Between Failures
+            const totaleFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0);
+            const mtbf = totaleFermi > 0 ? (24 / totaleFermi) : 24;
+            document.getElementById('mtbf').textContent = `${mtbf.toFixed(1)}h`;
+            
+            // Analisi Pareto
+            const maxScartoKey = Object.keys(scartiCausali).reduce((a, b) => scartiCausali[a] > scartiCausali[b] ? a : b);
+            const maxFermoKey = Object.keys(fermiCausali).reduce((a, b) => fermiCausali[a] > fermiCausali[b] ? a : b);
+            
+            document.getElementById('mainScartoCause').textContent = `Causale ${maxScartoKey} (${scartiCausali[maxScartoKey]} casi)`;
+            document.getElementById('mainFermoCause').textContent = `Causale ${maxFermoKey} (${fermiCausali[maxFermoKey]} casi)`;
+            document.getElementById('oeeImpact').textContent = `${(100 - oeeGiornaliero).toFixed(1)}%`;
+            
+            // Trend (simulato per demo, in produzione verrebbe da database storico)
+            const oeeYesterday = 72 + (Math.random() * 15);
+            const prodYesterday = 88 + (Math.random() * 20);
+            const qualityYesterday = 94 + (Math.random() * 5);
+            
+            const oeeMedia = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
+            const prodMedia = riassuntoTurni.reduce((sum, r) => sum + r.produttivita, 0) / 3;
+            const qualityMedia = riassuntoTurni.reduce((sum, r) => sum + r.qualita, 0) / 3;
+            
+            updateTrendDisplay('oeeVsYesterday', oeeMedia, oeeYesterday);
+            updateTrendDisplay('prodVsYesterday', prodMedia, prodYesterday);
+            updateTrendDisplay('qualityVsYesterday', qualityMedia, qualityYesterday);
+            
+            // Heatmap efficienza
+            createEfficiencyHeatmap(hourlyEfficiency.map(h => (h / 30) * 100));
+            
+            // Benchmark
+            const oeeVsBenchmark = oeeGiornaliero >= 85 ? '✅ Superiore' : oeeGiornaliero >= 60 ? '⚠️ Sotto media' : '❌ Critico';
+            document.getElementById('oeeVsBenchmark').textContent = oeeVsBenchmark;
+            
+            const turniOrdinati = riassuntoTurni.sort((a, b) => b.oee - a.oee);
+            document.getElementById('turniRanking').textContent = `1° ${turniOrdinati[0].turno} (${turniOrdinati[0].oee.toFixed(1)}%)`;
+            document.getElementById('targetAchieved').textContent = `${((totalBuoni / target) * 100).toFixed(1)}%`;
+            
+            // Raccomandazioni basate sui costi reali
+            generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi);
         }
 
         function updateTrendDisplay(elementId, current, previous) {
@@ -1722,21 +1697,8 @@
             }
         }
 
-        function generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi, mtbf, gustiVeri) {
+        function generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi) {
             const recommendations = [];
-            
-            // Analisi MTBF e affidabilità
-            if (gustiVeri > 0) {
-                if (mtbf < 100) {
-                    recommendations.push(`🚨 MTBF CRITICO: ${mtbf.toFixed(1)}h - ${gustiVeri} guasti >4h rilevati - Manutenzione straordinaria urgente`);
-                } else if (mtbf < 200) {
-                    recommendations.push(`⚠️ MTBF basso: ${mtbf.toFixed(1)}h - Pianificare manutenzione preventiva più frequente`);
-                } else {
-                    recommendations.push(`✅ MTBF buono: ${mtbf.toFixed(1)}h - Mantenere programma manutenzione attuale`);
-                }
-            } else {
-                recommendations.push(`✅ MTBF eccellente: Nessun guasto >4h oggi - Sistema molto affidabile`);
-            }
             
             // Analisi OEE
             if (oeeGiornaliero < 60) {
@@ -1761,7 +1723,16 @@
                 recommendations.push("✅ Scarti sotto controllo: Monitorare trend settimanale");
             }
             
-            // Aggiorna display - mostra solo le prime 3 raccomandazioni più importanti
+            // Analisi fermi con impatto economico
+            if (costoFermi > costoOrario * 4) { // Se costa più di 4 ore di produzione
+                recommendations.push(`⚠️ FERMI COSTOSI: €${costoFermi.toFixed(0)} persi - Manutenzione preventiva urgente`);
+            } else if (Object.values(fermiCausali).reduce((a, b) => a + b, 0) > 3) {
+                recommendations.push(`🔧 Troppi fermi: Analizzare manutenzione preventiva`);
+            } else {
+                recommendations.push("✅ Fermi sotto controllo: Continuare manutenzione programmata");
+            }
+            
+            // Aggiorna display
             document.getElementById('recommendation1').textContent = recommendations[0] || "• Analisi completata";
             document.getElementById('recommendation2').textContent = recommendations[1] || "• Dati sufficienti per analisi";
             document.getElementById('recommendation3').textContent = recommendations[2] || "• Sistema monitorato correttamente";
@@ -1791,6 +1762,10 @@
             for (let i = 4; i <= 6; i++) {
                 document.getElementById(`fermo${i}`).textContent = '0';
             }
+
+            // Reset mini charts
+            document.getElementById('totalScartiMini').textContent = '--';
+            document.getElementById('totalFermiMini').textContent = '--';
 
             Plotly.purge('tempChart');
             initializeChart();
