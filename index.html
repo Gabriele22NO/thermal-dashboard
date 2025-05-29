@@ -577,6 +577,38 @@
             </div>
 
             <div class="filter-section">
+                <h3>💰 Parametri Costo</h3>
+                <div class="filter-group">
+                    <label for="costManodopera">Costo Manodopera (€/h):</label>
+                    <input type="number" id="costManodopera" value="25" min="0" step="0.1">
+                </div>
+                <div class="filter-group">
+                    <label for="costEnergia">Costo Energia (€/kWh):</label>
+                    <input type="number" id="costEnergia" value="0.25" min="0" step="0.01">
+                </div>
+                <div class="filter-group">
+                    <label for="potenzaMacchina">Potenza Macchina (kW):</label>
+                    <input type="number" id="potenzaMacchina" value="15" min="0" step="0.1">
+                </div>
+                <div class="filter-group">
+                    <label for="ammortamentoAnnuo">Ammortamento (€/anno):</label>
+                    <input type="number" id="ammortamentoAnnuo" value="100000" min="0" step="1000">
+                </div>
+                <div class="filter-group">
+                    <label for="oreLavoro">Ore Lavoro/Anno:</label>
+                    <input type="number" id="oreLavoro" value="2000" min="1" step="1">
+                </div>
+                <div class="filter-group">
+                    <label for="altriCosti">Altri Costi Fissi (€/h):</label>
+                    <input type="number" id="altriCosti" value="8" min="0" step="0.1">
+                </div>
+                <div style="margin: 15px 0; padding: 10px; background: rgba(0, 212, 255, 0.1); border-radius: 8px; font-size: 0.9em;">
+                    <strong>💡 Costo Orario Calcolato:</strong><br>
+                    <span id="costoOrarioCalcolato" style="font-size: 1.2em; color: #00d4ff;">€-- /h</span>
+                </div>
+            </div>
+
+            <div class="filter-section">
                 <h3>⚙️ Controlli Sistema</h3>
                 <button class="btn secondary" onclick="loadData()">📡 Ricarica Dati</button>
                 <button class="btn secondary" onclick="resetZoom()">🔍 Reset Zoom</button>
@@ -921,6 +953,28 @@
                 const slice = arr.slice(Math.max(0, i - window + 1), i + 1);
                 return parseFloat((slice.reduce((sum, val) => sum + val, 0) / slice.length).toFixed(2));
             });
+        }
+
+        // Calcola costo orario reale
+        function calculateHourlyCost() {
+            const manodopera = parseFloat(document.getElementById('costManodopera').value) || 25;
+            const energiaCosto = parseFloat(document.getElementById('costEnergia').value) || 0.25;
+            const potenza = parseFloat(document.getElementById('potenzaMacchina').value) || 15;
+            const ammortamento = parseFloat(document.getElementById('ammortamentoAnnuo').value) || 100000;
+            const oreLavoro = parseFloat(document.getElementById('oreLavoro').value) || 2000;
+            const altriCosti = parseFloat(document.getElementById('altriCosti').value) || 8;
+            
+            // Calcolo componenti
+            const costoEnergia = energiaCosto * potenza; // €/h per energia
+            const costoAmmortamento = ammortamento / oreLavoro; // €/h per ammortamento
+            
+            // Totale costo orario
+            const costoOrario = manodopera + costoEnergia + costoAmmortamento + altriCosti;
+            
+            // Aggiorna display
+            document.getElementById('costoOrarioCalcolato').textContent = `€${costoOrario.toFixed(2)} /h`;
+            
+            return costoOrario;
         }
 
         // Determina il turno in base all'orario
@@ -1538,27 +1592,40 @@
             const totalScarti = riassuntoTurni.reduce((sum, r) => sum + r.scarti, 0);
             const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
             
-            // Costi (simulati)
-            const costoOrario = 250 + (Math.random() * 50);
-            const costoScarti = totalScarti * 15.5;
-            const costoFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0) * 45;
-            const perditeTarget = Math.max(0, (target - totalBuoni) * 12.3);
+            // Calcolo costo orario reale
+            const costoOrario = calculateHourlyCost();
+            
+            // Calcoli costi basati sui parametri reali
+            const costoUnitarioScarto = costoOrario * 0.1; // Stima: 6 minuti per gestire uno scarto
+            const costoMinutoFermo = costoOrario / 60;
+            
+            const costoScarti = totalScarti * costoUnitarioScarto;
+            const minUtiFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0) * 30; // 30 min medi per fermo
+            const costoFermi = minUtiFermi * costoMinutoFermo;
+            
+            // Calcolo perdite per mancato raggiungimento target
+            const pezziMancanti = Math.max(0, target - totalBuoni);
+            const ricavoUnitario = costoOrario * 0.2; // Stima margine 20%
+            const perditeTarget = pezziMancanti * ricavoUnitario;
             
             document.getElementById('costoOrario').textContent = `€${costoOrario.toFixed(0)}`;
             document.getElementById('costoScarti').textContent = `€${costoScarti.toFixed(0)}`;
             document.getElementById('costoFermi').textContent = `€${costoFermi.toFixed(0)}`;
             document.getElementById('perditeTarget').textContent = `€${perditeTarget.toFixed(0)}`;
             
-            // Tempo medio ciclo
-            const tempoMedioCiclo = 45 + (Math.random() * 10);
+            // Tempo medio ciclo (basato sui dati reali)
+            const cicliTotali = totalBuoni + totalScarti;
+            const tempoTotaleProduzione = 8 * 3; // 3 turni da 8 ore
+            const tempoMedioCiclo = cicliTotali > 0 ? (tempoTotaleProduzione * 3600) / cicliTotali : 0; // in secondi
             document.getElementById('tempoMedioCiclo').textContent = `${tempoMedioCiclo.toFixed(1)}s`;
             
             // Efficienza oraria
             const efficienzaOraria = (totalBuoni / target) * 100;
             document.getElementById('efficienzaOraria').textContent = `${efficienzaOraria.toFixed(1)}%`;
             
-            // MTBF
-            const mtbf = 24 + (Math.random() * 12);
+            // MTBF - Mean Time Between Failures
+            const totaleFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0);
+            const mtbf = totaleFermi > 0 ? (24 / totaleFermi) : 24;
             document.getElementById('mtbf').textContent = `${mtbf.toFixed(1)}h`;
             
             // Analisi Pareto
@@ -1569,7 +1636,7 @@
             document.getElementById('mainFermoCause').textContent = `Causale ${maxFermoKey} (${fermiCausali[maxFermoKey]} casi)`;
             document.getElementById('oeeImpact').textContent = `${(100 - oeeGiornaliero).toFixed(1)}%`;
             
-            // Trend (simulato)
+            // Trend (simulato per demo, in produzione verrebbe da database storico)
             const oeeYesterday = 72 + (Math.random() * 15);
             const prodYesterday = 88 + (Math.random() * 20);
             const qualityYesterday = 94 + (Math.random() * 5);
@@ -1593,8 +1660,8 @@
             document.getElementById('turniRanking').textContent = `1° ${turniOrdinati[0].turno} (${turniOrdinati[0].oee.toFixed(1)}%)`;
             document.getElementById('targetAchieved').textContent = `${((totalBuoni / target) * 100).toFixed(1)}%`;
             
-            // Raccomandazioni
-            generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero);
+            // Raccomandazioni basate sui costi reali
+            generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi);
         }
 
         function updateTrendDisplay(elementId, current, previous) {
@@ -1614,7 +1681,7 @@
             }
         }
 
-        function generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero) {
+        function generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi) {
             const recommendations = [];
             
             // Analisi OEE
@@ -1626,9 +1693,13 @@
                 recommendations.push("✅ OEE buono: Mantenere standard attuali e puntare all'85%");
             }
             
-            // Analisi scarti
+            // Analisi scarti con impatto economico
             const totalScarti = Object.values(scartiCausali).reduce((a, b) => a + b, 0);
-            if (totalScarti > 10) {
+            if (costoScarti > costoOrario * 2) { // Se costa più di 2 ore di produzione
+                const maxScarto = Object.keys(scartiCausali).reduce((a, b) => 
+                    scartiCausali[a] > scartiCausali[b] ? a : b);
+                recommendations.push(`💰 CRITICO: Scarti costano €${costoScarti.toFixed(0)} - Priorità Causale ${maxScarto}`);
+            } else if (totalScarti > 5) {
                 const maxScarto = Object.keys(scartiCausali).reduce((a, b) => 
                     scartiCausali[a] > scartiCausali[b] ? a : b);
                 recommendations.push(`🔧 Ridurre scarti Causale ${maxScarto}: Revisione processo/setup`);
@@ -1636,11 +1707,13 @@
                 recommendations.push("✅ Scarti sotto controllo: Monitorare trend settimanale");
             }
             
-            // Analisi turni
-            const turniOrdinati = riassuntoTurni.sort((a, b) => b.oee - a.oee);
-            const peggiore = turniOrdinati[turniOrdinati.length - 1];
-            if (peggiore.oee < 50) {
-                recommendations.push(`👥 TURNO ${peggiore.turno}: Performance critica - Training urgente`);
+            // Analisi fermi con impatto economico
+            if (costoFermi > costoOrario * 4) { // Se costa più di 4 ore di produzione
+                recommendations.push(`⚠️ FERMI COSTOSI: €${costoFermi.toFixed(0)} persi - Manutenzione preventiva urgente`);
+            } else if (Object.values(fermiCausali).reduce((a, b) => a + b, 0) > 3) {
+                recommendations.push(`🔧 Troppi fermi: Analizzare manutenzione preventiva`);
+            } else {
+                recommendations.push("✅ Fermi sotto controllo: Continuare manutenzione programmata");
             }
             
             // Aggiorna display
@@ -1820,6 +1893,23 @@
                             console.log('🎯 Target cambiato:', this.value);
                             updateChart();
                         });
+                        
+                        // Event listeners per parametri costo
+                        const costInputs = ['costManodopera', 'costEnergia', 'potenzaMacchina', 
+                                          'ammortamentoAnnuo', 'oreLavoro', 'altriCosti'];
+                        costInputs.forEach(inputId => {
+                            document.getElementById(inputId).addEventListener('input', function() {
+                                calculateHourlyCost();
+                                console.log('💰 Parametro costo aggiornato:', inputId, this.value);
+                                // Ricalcola anche le analisi se ci sono dati
+                                if (times.length > 0) {
+                                    setTimeout(() => updateChart(), 100);
+                                }
+                            });
+                        });
+                        
+                        // Calcola costo iniziale
+                        calculateHourlyCost();
                         
                         console.log('🎉 DASHBOARD AVANZATO INIZIALIZZATO CON SUCCESSO!');
                         
