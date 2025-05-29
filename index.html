@@ -6,6 +6,9 @@
     <title>Dashboard Analisi Termica Produzione</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -143,8 +146,8 @@
 
         .turno-stats {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
             margin-bottom: 20px;
         }
 
@@ -484,7 +487,7 @@
                             <div class="stat-label">Buoni</div>
                         </div>
                         <div class="stat-box">
-                            <div class="stat-value" id="scartiA">--</div>
+                            <div class="stat-value" id="scartiA">-</div>
                             <div class="stat-label">Scarti</div>
                         </div>
                         <div class="stat-box">
@@ -494,6 +497,14 @@
                         <div class="stat-box">
                             <div class="stat-value" id="produttivitaA">--%</div>
                             <div class="stat-label">Produttività</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="disponibilitaA">--%</div>
+                            <div class="stat-label">Disponibilità</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="fermiA">-- min</div>
+                            <div class="stat-label">Fermi</div>
                         </div>
                     </div>
                     <div class="oee-badge">OEE: <span id="oeeA">--%</span></div>
@@ -519,6 +530,14 @@
                             <div class="stat-value" id="produttivitaB">--%</div>
                             <div class="stat-label">Produttività</div>
                         </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="disponibilitaB">--%</div>
+                            <div class="stat-label">Disponibilità</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="fermiB">-- min</div>
+                            <div class="stat-label">Fermi</div>
+                        </div>
                     </div>
                     <div class="oee-badge">OEE: <span id="oeeB">--%</span></div>
                 </div>
@@ -542,6 +561,14 @@
                         <div class="stat-box">
                             <div class="stat-value" id="produttivitaC">--%</div>
                             <div class="stat-label">Produttività</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="disponibilitaC">--%</div>
+                            <div class="stat-label">Disponibilità</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="fermiC">-- min</div>
+                            <div class="stat-label">Fermi</div>
                         </div>
                     </div>
                     <div class="oee-badge">OEE: <span id="oeeC">--%</span></div>
@@ -924,7 +951,7 @@
 
 
 
-        // Aggiorna il grafico e le analisi
+        // Aggiorna il grafico e le analisi con logiche fermi avanzate
         function updateChart() {
             const giornoInput = document.getElementById('giornoFiltro').value;
             const target = parseInt(document.getElementById('targetInput').value);
@@ -961,7 +988,7 @@
             const cicloF = datiFiltrati.map(d => d.ciclo);
             const smoothed = smoothData(dataF);
 
-            // LOGICHE CORRETTE dal tuo codice originale
+            // LOGICHE FERMI AVANZATE - identiche al tuo codice + miglioramenti
             const turniData = { A: [], B: [], C: [] };
             const scartiTurno = { A: 0, B: 0, C: 0 };
             const scartiCausali = { '1': 0, '2': 0, '3': 0 };
@@ -976,14 +1003,14 @@
 
                 // LOGICA CICLI OK - identica al tuo codice
                 if (c === 'ok') {
-                    okMarkers.push({ x: timesF[i].toLocaleTimeString(), y: Math.round(smoothed[i]) });
+                    okMarkers.push({ x: timesF[i], y: Math.round(smoothed[i]) });
                     const delta = i > 0 ? (timesF[i] - timesF[i - 1]) / 1000 : 0;
                     turniData[turno].push({ index: i, tempo: delta });
                 } 
                 // LOGICA SCARTI - identica al tuo codice
                 else if (['1', '2', '3'].includes(c)) {
                     scartoMarkers.push({ 
-                        x: timesF[i].toLocaleTimeString(), 
+                        x: timesF[i], 
                         y: Math.round(smoothed[i]), 
                         label: c 
                     });
@@ -991,7 +1018,7 @@
                     scartiCausali[c]++;
                 }
 
-                // LOGICA FERMI - identica al tuo codice
+                // LOGICA FERMI MIGLIORATA - come tuo codice + auto-chiusura
                 if (!inFermo && typeof c === 'string' && c.trim().toLowerCase() === 'fermo') {
                     inFermo = true;
                     fermoStartTime = timesF[i];
@@ -1009,20 +1036,97 @@
                 }
             }
 
-            console.log('Analisi completata:', {
+            // MIGLIORAMENTO: Se fermo non chiuso, chiudi con causale 4 di default
+            if (inFermo && fermoStartTime) {
+                console.log('Fermo non chiuso, auto-chiusura con causale 4');
+                fermiCausali['4']++;
+                fermoAree.push({ 
+                    x0: fermoStartTime, 
+                    x1: timesF[timesF.length - 1], // Fine del turno
+                    causale: '4' 
+                });
+            }
+
+            console.log('Analisi fermi completata:', {
                 cicliOk: okMarkers.length,
                 scarti: scartoMarkers.length,
-                fermi: fermoAree.length
+                fermi: fermoAree.length,
+                fermiCausali: fermiCausali
             });
 
-            // Aggiorna il grafico
-            chart.data.labels = timesF.map(t => t.toLocaleTimeString());
-            chart.data.datasets[0].data = smoothed;
+            // Calcola aree turni per il grafico
+            const turnoAree = [
+                { 
+                    nome: 'Turno A', 
+                    inizio: new Date(inizioGiorno.getTime()), 
+                    fine: new Date(inizioGiorno.getTime() + 8 * 60 * 60 * 1000),
+                    colore: 'rgba(255, 107, 107, 0.1)' // Rosso chiaro
+                },
+                { 
+                    nome: 'Turno B', 
+                    inizio: new Date(inizioGiorno.getTime() + 8 * 60 * 60 * 1000), 
+                    fine: new Date(inizioGiorno.getTime() + 16 * 60 * 60 * 1000),
+                    colore: 'rgba(78, 205, 196, 0.1)' // Turchese chiaro
+                },
+                { 
+                    nome: 'Turno C', 
+                    inizio: new Date(inizioGiorno.getTime() + 16 * 60 * 60 * 1000), 
+                    fine: new Date(fineGiorno),
+                    colore: 'rgba(69, 183, 209, 0.1)' // Blu chiaro
+                }
+            ];
+
+            // Aggiorna il grafico con tutte le funzionalità
+            chart.data.labels = timesF;
+            chart.data.datasets[0].data = smoothed.map((temp, i) => ({ x: timesF[i], y: temp }));
             chart.data.datasets[1].data = okMarkers;
             chart.data.datasets[2].data = scartoMarkers;
+
+            // Aggiungi plugin per aree colorate e fermi
+            if (!chart.options.plugins.annotation) {
+                chart.options.plugins.annotation = { annotations: {} };
+            }
+
+            const annotations = {};
+            
+            // Aree turni colorate
+            turnoAree.forEach((turno, index) => {
+                annotations[`turno${index}`] = {
+                    type: 'box',
+                    xMin: turno.inizio,
+                    xMax: turno.fine,
+                    backgroundColor: turno.colore,
+                    borderWidth: 0,
+                    label: {
+                        display: true,
+                        content: turno.nome,
+                        position: 'start'
+                    }
+                };
+            });
+
+            // Aree fermi (rettangoli gialli)
+            fermoAree.forEach((fermo, index) => {
+                annotations[`fermo${index}`] = {
+                    type: 'box',
+                    xMin: fermo.x0,
+                    xMax: fermo.x1,
+                    backgroundColor: 'rgba(255, 255, 0, 0.4)',
+                    borderColor: 'rgba(255, 255, 0, 0.8)',
+                    borderWidth: 2,
+                    label: {
+                        display: true,
+                        content: `Fermo Causale ${fermo.causale}`,
+                        position: 'center'
+                    }
+                };
+            });
+
+            chart.options.plugins.annotation.annotations = annotations;
+
             chart.update();
 
-            // Calcola metriche per turno - identico al tuo codice
+            // Calcola metriche per turno con disponibilità corretta
             const riassuntoTurni = Object.entries(turniData).map(([turno, entries]) => {
                 const buoni = entries.length;
                 const scarti = scartiTurno[turno];
@@ -1030,22 +1134,31 @@
                 const qualita = cicloTotale > 0 ? (buoni / cicloTotale) * 100 : 0;
                 const produttivita = target > 0 ? (buoni / (target / 3)) * 100 : 0;
 
-                // Calcola disponibilità basata sui fermi nel turno
+                // Calcola disponibilità basata sui fermi EFFETTIVI nel turno
                 const inizioTurno = new Date(inizioGiorno);
                 if (turno === 'B') inizioTurno.setHours(14);
                 if (turno === 'C') inizioTurno.setHours(22);
                 const fineTurno = new Date(inizioTurno.getTime() + 8 * 60 * 60 * 1000);
 
                 const fermoNelTurno = fermoAree
-                    .filter(f => f.x0 >= inizioTurno && f.x1 <= fineTurno)
-                    .reduce((acc, f) => acc + (f.x1 - f.x0), 0);
+                    .filter(f => 
+                        (f.x0 >= inizioTurno && f.x0 < fineTurno) || // Inizia nel turno
+                        (f.x1 > inizioTurno && f.x1 <= fineTurno) || // Finisce nel turno
+                        (f.x0 < inizioTurno && f.x1 > fineTurno)     // Attraversa tutto il turno
+                    )
+                    .reduce((acc, f) => {
+                        const startTime = Math.max(f.x0.getTime(), inizioTurno.getTime());
+                        const endTime = Math.min(f.x1.getTime(), fineTurno.getTime());
+                        return acc + (endTime - startTime);
+                    }, 0);
+
                 const disponibilita = 100 * ((8 * 3600 * 1000 - fermoNelTurno) / (8 * 3600 * 1000));
 
                 const tempoDisponibile = (8 * 3600) - (fermoNelTurno / 1000);
                 const mediaTempo = cicloTotale > 0 ? (tempoDisponibile / cicloTotale).toFixed(1) : '-';
                 const oee = (qualita * produttivita * disponibilita) / 10000;
 
-                return { turno, buoni, scarti, qualita, produttivita, disponibilita, oee, mediaTempo };
+                return { turno, buoni, scarti, qualita, produttivita, disponibilita, oee, mediaTempo, fermoTempo: Math.round(fermoNelTurno / 60000) };
             });
 
             // Aggiorna l'interfaccia
@@ -1093,15 +1206,17 @@
                 '<div class="alert alert-warning">⚠️ Nessun dato per il giorno selezionato</div>';
         }
 
-        // Aggiorna display dei turni
+        // Aggiorna display dei turni con disponibilità e fermi
         function updateTurniDisplay(riassunto) {
             riassunto.forEach(r => {
-                const turno = r.turno.toLowerCase();
-                document.getElementById(`buoni${r.turno}`).textContent = r.buoni;
-                document.getElementById(`scarti${r.turno}`).textContent = r.scarti;
-                document.getElementById(`qualita${r.turno}`).textContent = r.qualita.toFixed(1) + '%';
-                document.getElementById(`produttivita${r.turno}`).textContent = r.produttivita.toFixed(1) + '%';
-                document.getElementById(`oee${r.turno}`).textContent = r.oee.toFixed(1) + '%';
+                const turno = r.turno;
+                document.getElementById(`buoni${turno}`).textContent = r.buoni;
+                document.getElementById(`scarti${turno}`).textContent = r.scarti;
+                document.getElementById(`qualita${turno}`).textContent = r.qualita.toFixed(1) + '%';
+                document.getElementById(`produttivita${turno}`).textContent = r.produttivita.toFixed(1) + '%';
+                document.getElementById(`disponibilita${turno}`).textContent = r.disponibilita.toFixed(1) + '%';
+                document.getElementById(`fermi${turno}`).textContent = r.fermoTempo + ' min';
+                document.getElementById(`oee${turno}`).textContent = r.oee.toFixed(1) + '%';
             });
         }
 
