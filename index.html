@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Analisi Termica Produzione</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -143,8 +143,8 @@
 
         .turno-stats {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
             margin-bottom: 20px;
         }
 
@@ -396,18 +396,28 @@
                     <label for="targetInput">Target Giornaliero:</label>
                     <input type="number" id="targetInput" value="100" min="1">
                 </div>
-                <button class="btn" onclick="loadAndUpdateData()">🔄 Aggiorna Analisi</button>
+                <button class="btn" onclick="updateChart()">🔄 Aggiorna Analisi</button>
             </div>
 
             <div class="filter-section">
                 <h3>⚙️ Controlli Sistema</h3>
                 <button class="btn secondary" onclick="loadData()">📡 Ricarica Dati</button>
+                <button class="btn secondary" onclick="resetZoom()">🔍 Reset Zoom</button>
                 <button class="btn secondary" onclick="exportData()">💾 Esporta CSV</button>
                 <button class="btn secondary" onclick="toggleAutoRefresh()" id="toggleRefreshBtn">⏸️ Pausa Auto-Refresh</button>
                 
                 <div class="refresh-controls">
                     <div>🔄 Auto-refresh: <span id="refreshStatus">Attivo</span></div>
                     <div>⏱️ Prossimo: <span id="nextRefresh">--</span>s</div>
+                </div>
+
+                <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px; font-size: 0.85em;">
+                    <strong>🎮 Controlli Plotly:</strong><br>
+                    • <strong>📦 Box Zoom:</strong> Seleziona area<br>
+                    • <strong>🖱️ Pan:</strong> Trascina grafico<br>
+                    • <strong>🔍 Zoom:</strong> Rotella mouse<br>
+                    • <strong>🏠 Reset:</strong> Pulsante Home<br>
+                    • <strong>💾 Download:</strong> Salva PNG
                 </div>
             </div>
 
@@ -436,7 +446,7 @@
 
         <main class="main-content">
             <div class="chart-container">
-                <canvas id="tempChart"></canvas>
+                <div id="tempChart"></div>
                 <div class="loading" id="loading">
                     <div class="spinner"></div>
                     <p>Caricamento dati produzione...</p>
@@ -484,7 +494,7 @@
                             <div class="stat-label">Buoni</div>
                         </div>
                         <div class="stat-box">
-                            <div class="stat-value" id="scartiA">--</div>
+                            <div class="stat-value" id="scartiA">-</div>
                             <div class="stat-label">Scarti</div>
                         </div>
                         <div class="stat-box">
@@ -494,6 +504,14 @@
                         <div class="stat-box">
                             <div class="stat-value" id="produttivitaA">--%</div>
                             <div class="stat-label">Produttività</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="disponibilitaA">--%</div>
+                            <div class="stat-label">Disponibilità</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="fermiA">-- min</div>
+                            <div class="stat-label">Fermi</div>
                         </div>
                     </div>
                     <div class="oee-badge">OEE: <span id="oeeA">--%</span></div>
@@ -519,6 +537,14 @@
                             <div class="stat-value" id="produttivitaB">--%</div>
                             <div class="stat-label">Produttività</div>
                         </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="disponibilitaB">--%</div>
+                            <div class="stat-label">Disponibilità</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="fermiB">-- min</div>
+                            <div class="stat-label">Fermi</div>
+                        </div>
                     </div>
                     <div class="oee-badge">OEE: <span id="oeeB">--%</span></div>
                 </div>
@@ -543,6 +569,14 @@
                             <div class="stat-value" id="produttivitaC">--%</div>
                             <div class="stat-label">Produttività</div>
                         </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="disponibilitaC">--%</div>
+                            <div class="stat-label">Disponibilità</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="fermiC">-- min</div>
+                            <div class="stat-label">Fermi</div>
+                        </div>
                     </div>
                     <div class="oee-badge">OEE: <span id="oeeC">--%</span></div>
                 </div>
@@ -551,11 +585,13 @@
     </div>
 
     <script>
-        // Variabili globali
-        let csvData, originalData = [], times = [], ciclo = [], chart = null;
+        // === VARIABILI GLOBALI ===
+        let csvData = [], originalData = [], times = [], ciclo = [];
         let refreshInterval = null, countdownInterval = null;
         let autoRefreshEnabled = true, lastCSV = '';
 
+        // === FUNZIONI UTILITY ===
+        
         // Smoothing dei dati (media mobile)
         function smoothData(data, window = 34) {
             return data.map((_, i, arr) => {
@@ -572,294 +608,152 @@
             return 'C';
         }
 
-        // Inizializza il grafico
+        // === INIZIALIZZAZIONE PLOTLY ===
+        
         function initializeChart() {
-            const ctx = document.getElementById('tempChart').getContext('2d');
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'Temperatura (°C)',
-                            data: [],
-                            borderColor: '#00ffcc',
-                            backgroundColor: 'rgba(0, 255, 204, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 0
-                        },
-                        {
-                            label: 'Cicli OK',
-                            data: [],
-                            backgroundColor: '#00ff88',
-                            borderColor: '#00ff88',
-                            pointRadius: 6,
-                            pointHoverRadius: 8,
-                            showLine: false,
-                            type: 'scatter'
-                        },
-                        {
-                            label: 'Scarti',
-                            data: [],
-                            backgroundColor: '#ff4757',
-                            borderColor: '#ff4757',
-                            pointRadius: 6,
-                            pointHoverRadius: 8,
-                            showLine: false,
-                            type: 'scatter'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Andamento Termico Produzione - Cicli Stampo',
-                            color: '#fff',
-                            font: { size: 16, weight: 'bold' }
-                        },
-                        legend: {
-                            display: true,
-                            position: 'top',
-                            labels: { color: '#fff' }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Orario Produzione',
-                                color: '#fff'
-                            },
-                            ticks: { color: '#fff' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Temperatura (°C)',
-                                color: '#fff'
-                            },
-                            ticks: { color: '#fff' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            min: 350,
-                            max: 400
-                        }
-                    }
+            console.log('🚀 Inizializzazione grafico Plotly...');
+            
+            try {
+                if (typeof Plotly === 'undefined') {
+                    throw new Error('Plotly non caricato');
                 }
-            });
+
+                const layout = {
+                    title: {
+                        text: '🏭 Andamento Termico Produzione - Cicli Stampo',
+                        font: { size: 18, color: '#fff', family: 'Segoe UI' },
+                        x: 0.5
+                    },
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#fff', family: 'Segoe UI' },
+                    margin: { t: 60, b: 50, l: 60, r: 50 },
+                    
+                    xaxis: {
+                        title: { text: 'Orario', font: { size: 14, color: '#fff' } },
+                        tickfont: { size: 12, color: '#fff' },
+                        gridcolor: 'rgba(255, 255, 255, 0.1)',
+                        tickformat: '%H:%M',
+                        nticks: 8,
+                        type: 'date'
+                    },
+                    
+                    yaxis: {
+                        title: { text: 'Temperatura (°C)', font: { size: 14, color: '#fff' } },
+                        tickfont: { size: 12, color: '#fff' },
+                        gridcolor: 'rgba(255, 255, 255, 0.15)',
+                        ticksuffix: '°C',
+                        autorange: true
+                    },
+                    
+                    legend: {
+                        x: 0, y: 1.15, orientation: 'h',
+                        font: { size: 12, color: '#fff' },
+                        bgcolor: 'rgba(255,255,255,0.1)',
+                        bordercolor: 'rgba(255,255,255,0.2)',
+                        borderwidth: 1
+                    },
+                    
+                    hovermode: 'x unified',
+                    showlegend: true
+                };
+                
+                const config = {
+                    displayModeBar: true,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                    displaylogo: false,
+                    responsive: true
+                };
+                
+                Plotly.newPlot('tempChart', [], layout, config);
+                console.log('✅ Grafico Plotly inizializzato');
+                
+            } catch (error) {
+                console.error('❌ Errore inizializzazione Plotly:', error);
+                document.getElementById('tempChart').innerHTML = 
+                    `<div style="color: #ff4757; padding: 20px; text-align: center;">
+                        <h3>⚠️ Errore Grafico</h3>
+                        <p>${error.message}</p>
+                    </div>`;
+            }
         }
 
-        // Carica dati con controllo Papa Parse e fallback
+        // === CARICAMENTO DATI ===
+        
         function loadData() {
+            if (typeof Papa !== 'undefined') {
+                loadDataWithPapa();
+            } else {
+                loadFallbackData();
+            }
+        }
+
+        function loadDataWithPapa() {
             try {
                 showLoading(true);
-                console.log('Caricamento dati reali da Google Sheets...');
+                console.log('📡 Caricamento dati con Papa Parse...');
                 
-                // Controllo se Papa Parse è disponibile
-                if (typeof Papa !== 'undefined') {
-                    console.log('Papa Parse disponibile, uso Papa Parse...');
-                    loadDataWithPapa();
-                } else {
-                    console.log('Papa Parse non disponibile, uso metodo alternativo...');
-                    loadDataWithFetch();
-                }
-                
-            } catch (error) {
-                console.error('Errore generale nel caricamento:', error);
-                showLoading(false);
-                loadFallbackData();
-            }
-        }
+                Papa.parse('https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1', {
+                    download: true,
+                    header: true,
+                    complete: function(res) {
+                        try {
+                            const newCSV = JSON.stringify(res.data);
+                            if (newCSV === lastCSV) {
+                                console.log('⏭️ Dati non cambiati');
+                                showLoading(false);
+                                return;
+                            }
+                            lastCSV = newCSV;
 
-        // Carica dati con Papa Parse
-        function loadDataWithPapa() {
-            Papa.parse('https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/gviz/tq?tqx=out:csv&sheet=Foglio1', {
-                download: true,
-                header: true,
-                complete: function(res) {
-                    try {
-                        console.log('Papa Parse - Dati ricevuti:', res.data.length, 'righe');
-                        
-                        const newCSV = JSON.stringify(res.data);
-                        if (newCSV === lastCSV) {
-                            console.log('Dati non cambiati, skip update');
+                            csvData = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
+                            
+                            if (csvData.length === 0) {
+                                throw new Error('Nessun dato valido nel CSV');
+                            }
+                            
+                            console.log('📊 Dati CSV ricevuti:', csvData.length, 'righe');
+                            
+                            times = csvData.map(r => {
+                                const [mdy, time] = r.Timestamp.split(" ");
+                                const [month, day, year] = mdy.split("/").map(Number);
+                                const [hour, minute, second] = time.split(":").map(Number);
+                                return new Date(year, month - 1, day, hour, minute, second);
+                            });
+                            
+                            originalData = csvData.map(r => parseFloat(r["Temp1 (°C)"])).filter(val => !isNaN(val));
+                            ciclo = csvData.map(r => r.Ciclo || "");
+                            
+                            console.log('✅ Dati processati:', originalData.length, 'punti');
+                            updateChart();
                             showLoading(false);
-                            return;
-                        }
-                        lastCSV = newCSV;
-
-                        // Filtra e processa i dati
-                        csvData = res.data.filter(r => r.Timestamp && r["Temp1 (°C)"]);
-                        
-                        if (csvData.length === 0) {
-                            console.log('Nessun dato valido, uso fallback');
+                            
+                        } catch (error) {
+                            console.error('❌ Errore processing:', error);
                             loadFallbackData();
-                            return;
                         }
-                        
-                        console.log('Dati CSV filtrati:', csvData.length, 'righe');
-                        console.log('Esempio dati:', csvData.slice(0, 3));
-                        
-                        // Parsing delle date
-                        times = csvData.map(r => {
-                            const [mdy, time] = r.Timestamp.split(" ");
-                            const [month, day, year] = mdy.split("/").map(Number);
-                            const [hour, minute, second] = time.split(":").map(Number);
-                            return new Date(year, month - 1, day, hour, minute, second);
-                        });
-                        
-                        // Dati temperatura
-                        originalData = csvData.map(r => parseFloat(r["Temp1 (°C)"])).filter(val => !isNaN(val));
-                        
-                        // Cicli produzione
-                        ciclo = csvData.map(r => r.Ciclo || "");
-                        
-                        console.log('Papa Parse - Dati processati:', {
-                            punti: originalData.length,
-                            temperatura_esempio: originalData.slice(0, 5),
-                            cicli_esempio: ciclo.slice(0, 10).filter(c => c !== ''),
-                            primo_timestamp: times[0]?.toLocaleString()
-                        });
-                        
-                        updateChart();
-                        showLoading(false);
-                        
-                    } catch (error) {
-                        console.error('Errore Papa Parse processing:', error);
+                    },
+                    error: function(error) {
+                        console.error('❌ Errore Papa Parse:', error);
                         loadFallbackData();
                     }
-                },
-                error: function(error) {
-                    console.error('Errore Papa Parse download:', error);
-                    loadDataWithFetch();
-                }
-            });
-        }
-
-        // Carica dati con fetch (alternativo)
-        async function loadDataWithFetch() {
-            try {
-                console.log('Tentativo caricamento con fetch...');
-                
-                // Prova prima con JSONP-style URL che spesso bypassa CORS
-                const corsProxyUrl = 'https://api.allorigins.win/raw?url=';
-                const targetUrl = encodeURIComponent('https://docs.google.com/spreadsheets/d/1gNUrOS9Ibat2DtpINCAd_7ptcFk8-blRctzeK1Eyej0/export?format=csv&gid=0');
-                
-                const response = await fetch(corsProxyUrl + targetUrl);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const csvText = await response.text();
-                console.log('Fetch - CSV ricevuto, lunghezza:', csvText.length);
-                console.log('Fetch - Primi 200 caratteri:', csvText.substring(0, 200));
-                
-                parseCSVManually(csvText);
-                
-            } catch (error) {
-                console.error('Errore fetch:', error);
-                loadFallbackData();
-            }
-        }
-
-        // Parse CSV manuale
-        function parseCSVManually(csvText) {
-            try {
-                const lines = csvText.split('\n').filter(line => line.trim());
-                if (lines.length < 2) {
-                    throw new Error('CSV vuoto');
-                }
-                
-                const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-                console.log('Headers rilevati:', headers);
-                
-                const timestampCol = headers.findIndex(h => h.toLowerCase().includes('timestamp'));
-                const tempCol = headers.findIndex(h => h.toLowerCase().includes('temp'));
-                const cicloCol = headers.findIndex(h => h.toLowerCase().includes('ciclo'));
-                
-                console.log('Colonne:', { timestampCol, tempCol, cicloCol });
-                
-                if (timestampCol === -1 || tempCol === -1) {
-                    throw new Error('Colonne essenziali non trovate');
-                }
-                
-                // Reset arrays
-                times = [];
-                originalData = [];
-                ciclo = [];
-                csvData = [];
-                
-                for (let i = 1; i < lines.length; i++) {
-                    const cols = lines[i].split(',').map(c => c.replace(/"/g, '').trim());
-                    
-                    const timestampStr = cols[timestampCol];
-                    const tempStr = cols[tempCol];
-                    const cicloStr = cicloCol >= 0 ? cols[cicloCol] : '';
-                    
-                    if (!timestampStr || !tempStr) continue;
-                    
-                    try {
-                        // Parse timestamp
-                        const [datePart, timePart] = timestampStr.split(' ');
-                        const [month, day, year] = datePart.split('/').map(Number);
-                        const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
-                        
-                        const timestamp = new Date(year, month - 1, day, hour || 0, minute || 0, second || 0);
-                        const temperature = parseFloat(tempStr);
-                        
-                        if (isNaN(temperature) || isNaN(timestamp.getTime())) continue;
-                        
-                        times.push(timestamp);
-                        originalData.push(temperature);
-                        ciclo.push(cicloStr || '');
-                        
-                        csvData.push({
-                            Timestamp: timestampStr,
-                            "Temp1 (°C)": tempStr,
-                            Ciclo: cicloStr
-                        });
-                        
-                    } catch (parseError) {
-                        console.warn('Errore parsing riga:', parseError);
-                    }
-                }
-                
-                console.log('Parse manuale completato:', {
-                    punti: originalData.length,
-                    temperatura_esempio: originalData.slice(0, 5)
                 });
                 
-                if (originalData.length === 0) {
-                    throw new Error('Nessun dato valido parsato');
-                }
-                
-                updateChart();
-                showLoading(false);
-                
             } catch (error) {
-                console.error('Errore parse manuale:', error);
+                console.error('❌ Errore caricamento:', error);
                 loadFallbackData();
             }
         }
 
-        // Carica dati di fallback (i tuoi dati reali)
         function loadFallbackData() {
-            console.log('Caricamento dati di fallback basati sui tuoi dati reali...');
-            
+            console.log('🔄 Caricamento dati di fallback...');
             showLoading(true);
             
-            // Reset arrays
             times = [];
             originalData = [];
             ciclo = [];
             csvData = [];
             
-            // Dati reali dal tuo Google Sheets (dal 13/05/2025)
             const realData = [
                 { timestamp: '5/13/2025 12:40:08', temp: 381.3, ciclo: '' },
                 { timestamp: '5/13/2025 12:40:13', temp: 382.0, ciclo: 'ok' },
@@ -878,241 +772,345 @@
                 { timestamp: '5/13/2025 12:41:17', temp: 385.5, ciclo: 'ok' },
                 { timestamp: '5/13/2025 12:41:22', temp: 385.3, ciclo: '' },
                 { timestamp: '5/13/2025 12:41:27', temp: 385.5, ciclo: 'fermo' },
-                { timestamp: '5/13/2025 12:41:33', temp: 385.5, ciclo: '' },
-                { timestamp: '5/13/2025 12:41:38', temp: 385.0, ciclo: '4' },
-                { timestamp: '5/13/2025 12:41:44', temp: 385.0, ciclo: 'ok' }
+                { timestamp: '5/13/2025 12:41:33', temp: 382.0, ciclo: '' },
+                { timestamp: '5/13/2025 12:41:38', temp: 380.5, ciclo: '' },
+                { timestamp: '5/13/2025 12:41:44', temp: 381.0, ciclo: '4' },
+                { timestamp: '5/13/2025 12:41:50', temp: 385.0, ciclo: 'ok' }
             ];
             
-            // Estendi per creare 24 ore di dati
-            const baseDate = new Date(2025, 4, 13, 6, 0, 0); // 13 maggio 2025, ore 6:00
+            const baseDate = new Date(2025, 4, 13, 6, 0, 0);
             let dataIndex = 0;
             
-            // Genera dati per 24 ore (ogni 2 minuti)
             for (let minutes = 0; minutes < 24 * 60; minutes += 2) {
                 const timestamp = new Date(baseDate.getTime() + minutes * 60 * 1000);
                 const dataPoint = realData[dataIndex % realData.length];
                 
                 let temperature = dataPoint.temp;
-                // Aggiungi piccole variazioni realistiche
-                temperature += (Math.random() - 0.5) * 1.5;
+                let cicloValue = dataPoint.ciclo;
+                
+                if (cicloValue === 'fermo' || cicloValue === '') {
+                    temperature += (Math.random() - 0.5) * 3;
+                } else {
+                    temperature += (Math.random() - 0.5) * 1.5;
+                }
                 temperature = Math.round(temperature * 10) / 10;
+                
+                if (Math.random() < 0.01 && cicloValue === '') {
+                    if (Math.random() < 0.3) {
+                        cicloValue = 'fermo';
+                    } else if (Math.random() < 0.1) {
+                        cicloValue = Math.floor(Math.random() * 3 + 4).toString();
+                    }
+                }
                 
                 times.push(timestamp);
                 originalData.push(temperature);
-                ciclo.push(dataPoint.ciclo);
+                ciclo.push(cicloValue);
                 
                 csvData.push({
                     Timestamp: timestamp.toLocaleDateString() + ' ' + timestamp.toLocaleTimeString(),
                     "Temp1 (°C)": temperature.toString(),
-                    Ciclo: dataPoint.ciclo
+                    Ciclo: cicloValue
                 });
                 
                 dataIndex++;
             }
             
-            console.log('Dati fallback caricati:', {
-                punti: originalData.length,
-                da: times[0]?.toLocaleString(),
-                a: times[times.length - 1]?.toLocaleString(),
-                cicli_ok: ciclo.filter(c => c === 'ok').length,
-                scarti: ciclo.filter(c => ['1','2','3'].includes(c)).length
-            });
-            
+            console.log('✅ Dati fallback caricati:', originalData.length, 'punti');
             updateChart();
             showLoading(false);
         }
 
-
-
-        // Aggiorna il grafico e le analisi
+        // === AGGIORNAMENTO GRAFICO ===
+        
         function updateChart() {
-            const giornoInput = document.getElementById('giornoFiltro').value;
-            const target = parseInt(document.getElementById('targetInput').value);
+            console.log('🔄 Aggiornamento grafico...');
             
-            if (!giornoInput || !times.length || !target) {
-                console.log('Parametri mancanti per l\'aggiornamento');
-                return;
-            }
-
-            // Calcola il range del giorno lavorativo (6:00 - 6:00 del giorno dopo)
-            const [year, month, day] = giornoInput.split('-');
-            const inizioGiorno = new Date(+year, month - 1, +day, 6, 0, 0);
-            const fineGiorno = new Date(inizioGiorno.getTime() + 24 * 60 * 60 * 1000);
-
-            console.log('Filtrando dati dal', inizioGiorno, 'al', fineGiorno);
-
-            // Filtra dati per il giorno selezionato
-            const datiFiltrati = times.map((t, i) => ({ 
-                time: t, 
-                temp: originalData[i], 
-                ciclo: ciclo[i] 
-            })).filter(d => d.time >= inizioGiorno && d.time < fineGiorno);
-
-            if (!datiFiltrati.length) {
-                console.log('Nessun dato per il giorno selezionato');
-                resetDisplays();
-                return;
-            }
-
-            console.log('Dati filtrati per il giorno:', datiFiltrati.length);
-
-            const timesF = datiFiltrati.map(d => d.time);
-            const dataF = datiFiltrati.map(d => d.temp);
-            const cicloF = datiFiltrati.map(d => d.ciclo);
-            const smoothed = smoothData(dataF);
-
-            // LOGICHE CORRETTE dal tuo codice originale
-            const turniData = { A: [], B: [], C: [] };
-            const scartiTurno = { A: 0, B: 0, C: 0 };
-            const scartiCausali = { '1': 0, '2': 0, '3': 0 };
-            const fermiCausali = { '4': 0, '5': 0, '6': 0 };
-
-            const okMarkers = [], scartoMarkers = [], fermoAree = [];
-            let inFermo = false, fermoStartTime = null;
-
-            for (let i = 0; i < timesF.length; i++) {
-                const turno = getTurno(timesF[i]);
-                const c = cicloF[i];
-
-                // LOGICA CICLI OK - identica al tuo codice
-                if (c === 'ok') {
-                    okMarkers.push({ x: timesF[i].toLocaleTimeString(), y: Math.round(smoothed[i]) });
-                    const delta = i > 0 ? (timesF[i] - timesF[i - 1]) / 1000 : 0;
-                    turniData[turno].push({ index: i, tempo: delta });
-                } 
-                // LOGICA SCARTI - identica al tuo codice
-                else if (['1', '2', '3'].includes(c)) {
-                    scartoMarkers.push({ 
-                        x: timesF[i].toLocaleTimeString(), 
-                        y: Math.round(smoothed[i]), 
-                        label: c 
-                    });
-                    scartiTurno[turno]++;
-                    scartiCausali[c]++;
+            try {
+                const giornoInput = document.getElementById('giornoFiltro').value;
+                const target = parseInt(document.getElementById('targetInput').value);
+                
+                if (!giornoInput || !times.length || !target) {
+                    console.log('⚠️ Parametri mancanti');
+                    return;
                 }
 
-                // LOGICA FERMI - identica al tuo codice
-                if (!inFermo && typeof c === 'string' && c.trim().toLowerCase() === 'fermo') {
-                    inFermo = true;
-                    fermoStartTime = timesF[i];
-                    console.log('Inizio fermo alle', timesF[i]);
-                } else if (inFermo && ['4', '5', '6'].includes(c)) {
-                    fermiCausali[c]++;
+                const [year, month, day] = giornoInput.split('-');
+                const inizioGiorno = new Date(+year, month - 1, +day, 6, 0, 0);
+                const fineGiorno = new Date(inizioGiorno.getTime() + 24 * 60 * 60 * 1000);
+
+                const datiFiltrati = times.map((t, i) => ({ 
+                    time: t, 
+                    temp: originalData[i], 
+                    ciclo: ciclo[i] 
+                })).filter(d => d.time >= inizioGiorno && d.time < fineGiorno);
+
+                if (!datiFiltrati.length) {
+                    console.log('❌ Nessun dato per il giorno');
+                    resetDisplays();
+                    return;
+                }
+
+                console.log('✅ Dati filtrati:', datiFiltrati.length, 'punti');
+
+                const timesF = datiFiltrati.map(d => d.time);
+                const dataF = datiFiltrati.map(d => d.temp);
+                const cicloF = datiFiltrati.map(d => d.ciclo);
+                const smoothed = smoothData(dataF);
+
+                // Analisi dati produzione
+                const turniData = { A: [], B: [], C: [] };
+                const scartiTurno = { A: 0, B: 0, C: 0 };
+                const scartiCausali = { '1': 0, '2': 0, '3': 0 };
+                const fermiCausali = { '4': 0, '5': 0, '6': 0 };
+
+                const okMarkers = [], scartoMarkers = [], fermoAree = [];
+                let inFermo = false, fermoStartTime = null;
+
+                for (let i = 0; i < timesF.length; i++) {
+                    const turno = getTurno(timesF[i]);
+                    const c = cicloF[i];
+
+                    if (c === 'ok') {
+                        okMarkers.push({ x: timesF[i], y: Math.round(smoothed[i]) });
+                        const delta = i > 0 ? (timesF[i] - timesF[i - 1]) / 1000 : 0;
+                        turniData[turno].push({ index: i, tempo: delta });
+                    } 
+                    else if (['1', '2', '3'].includes(c)) {
+                        scartoMarkers.push({ 
+                            x: timesF[i], 
+                            y: Math.round(smoothed[i]), 
+                            label: c 
+                        });
+                        scartiTurno[turno]++;
+                        scartiCausali[c]++;
+                    }
+
+                    if (!inFermo && typeof c === 'string' && c.trim().toLowerCase() === 'fermo') {
+                        inFermo = true;
+                        fermoStartTime = timesF[i];
+                    } else if (inFermo && ['4', '5', '6'].includes(c)) {
+                        fermiCausali[c]++;
+                        fermoAree.push({ 
+                            x0: fermoStartTime, 
+                            x1: timesF[i], 
+                            causale: c 
+                        });
+                        inFermo = false;
+                        fermoStartTime = null;
+                    }
+                }
+
+                if (inFermo && fermoStartTime) {
+                    fermiCausali['4']++;
                     fermoAree.push({ 
                         x0: fermoStartTime, 
-                        x1: timesF[i], 
-                        causale: c 
+                        x1: timesF[timesF.length - 1],
+                        causale: '4' 
                     });
-                    console.log('Fine fermo causale', c, 'dalle', fermoStartTime, 'alle', timesF[i]);
-                    inFermo = false;
-                    fermoStartTime = null;
                 }
+
+                // Prepara traces Plotly
+                const traces = [];
+
+                traces.push({
+                    x: timesF,
+                    y: smoothed,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Temperatura (°C)',
+                    line: { color: '#00ffcc', width: 3, shape: 'spline' },
+                    fill: 'tozeroy',
+                    fillcolor: 'rgba(0, 255, 204, 0.1)',
+                    hovertemplate: '<b>%{y:.1f}°C</b><br>%{x|%H:%M}<extra></extra>'
+                });
+
+                if (okMarkers.length > 0) {
+                    traces.push({
+                        x: okMarkers.map(m => m.x),
+                        y: okMarkers.map(m => m.y),
+                        type: 'scatter',
+                        mode: 'markers',
+                        name: 'Cicli OK',
+                        marker: { color: '#00ff88', size: 8, symbol: 'circle' },
+                        hovertemplate: '<b>Ciclo OK</b><br>%{y:.1f}°C<br>%{x|%H:%M}<extra></extra>'
+                    });
+                }
+
+                if (scartoMarkers.length > 0) {
+                    traces.push({
+                        x: scartoMarkers.map(m => m.x),
+                        y: scartoMarkers.map(m => m.y),
+                        type: 'scatter',
+                        mode: 'markers+text',
+                        name: 'Scarti',
+                        marker: { color: '#ff4757', size: 10, symbol: 'x' },
+                        text: scartoMarkers.map(m => m.label),
+                        textposition: 'top center',
+                        textfont: { color: '#ff4757', size: 10 },
+                        hovertemplate: '<b>Scarto Causale %{text}</b><br>%{y:.1f}°C<br>%{x|%H:%M}<extra></extra>'
+                    });
+                }
+
+                if (fermoAree.length > 0) {
+                    const fermoMarkers = fermoAree.map(fermo => ({
+                        x: new Date((fermo.x0.getTime() + fermo.x1.getTime()) / 2),
+                        y: 380,
+                        causale: fermo.causale
+                    }));
+
+                    traces.push({
+                        x: fermoMarkers.map(m => m.x),
+                        y: fermoMarkers.map(m => m.y),
+                        type: 'scatter',
+                        mode: 'markers',
+                        name: 'Fermi',
+                        marker: { color: '#ffa502', size: 12, symbol: 'square' },
+                        text: fermoMarkers.map(m => m.causale),
+                        hovertemplate: '<b>Fermo Causale %{text}</b><br>%{x|%H:%M}<extra></extra>'
+                    });
+                }
+
+                // Layout con shapes
+                const shapes = [];
+                const turno1End = new Date(inizioGiorno.getTime() + 8 * 60 * 60 * 1000);
+                const turno2End = new Date(inizioGiorno.getTime() + 16 * 60 * 60 * 1000);
+
+                shapes.push(
+                    {
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: inizioGiorno, x1: turno1End, y0: 0, y1: 1,
+                        fillcolor: 'rgba(255, 107, 107, 0.08)', opacity: 0.3, line: { width: 0 }
+                    },
+                    {
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: turno1End, x1: turno2End, y0: 0, y1: 1,
+                        fillcolor: 'rgba(78, 205, 196, 0.08)', opacity: 0.3, line: { width: 0 }
+                    },
+                    {
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: turno2End, x1: fineGiorno, y0: 0, y1: 1,
+                        fillcolor: 'rgba(69, 183, 209, 0.08)', opacity: 0.3, line: { width: 0 }
+                    }
+                );
+
+                fermoAree.forEach(fermo => {
+                    shapes.push({
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: fermo.x0, x1: fermo.x1, y0: 0, y1: 1,
+                        fillcolor: 'rgba(255, 255, 0, 0.3)', opacity: 0.6,
+                        line: { color: 'rgba(255, 255, 0, 0.8)', width: 2 }
+                    });
+                });
+
+                const layout = {
+                    title: {
+                        text: '🏭 Andamento Termico Produzione - Cicli Stampo',
+                        font: { size: 18, color: '#fff', family: 'Segoe UI' }, x: 0.5
+                    },
+                    plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#fff', family: 'Segoe UI' },
+                    margin: { t: 60, b: 50, l: 60, r: 50 },
+                    
+                    xaxis: {
+                        title: { text: 'Orario', font: { size: 14, color: '#fff' } },
+                        tickfont: { size: 12, color: '#fff' },
+                        gridcolor: 'rgba(255, 255, 255, 0.1)',
+                        tickformat: '%H:%M', nticks: 8, type: 'date',
+                        range: [inizioGiorno, fineGiorno]
+                    },
+                    
+                    yaxis: {
+                        title: { text: 'Temperatura (°C)', font: { size: 14, color: '#fff' } },
+                        tickfont: { size: 12, color: '#fff' },
+                        gridcolor: 'rgba(255, 255, 255, 0.15)',
+                        ticksuffix: '°C', autorange: true
+                    },
+                    
+                    legend: {
+                        x: 0, y: 1.15, orientation: 'h',
+                        font: { size: 12, color: '#fff' },
+                        bgcolor: 'rgba(255,255,255,0.1)',
+                        bordercolor: 'rgba(255,255,255,0.2)', borderwidth: 1
+                    },
+                    
+                    hovermode: 'x unified', showlegend: true, shapes: shapes
+                };
+
+                const config = {
+                    displayModeBar: true,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                    displaylogo: false, responsive: true
+                };
+
+                Plotly.react('tempChart', traces, layout, config);
+
+                // Calcola e aggiorna metriche
+                const riassuntoTurni = calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree);
+                updateAllDisplays(riassuntoTurni, scartiCausali, fermiCausali, datiFiltrati.length, giornoInput, target);
+
+                console.log('✅ Grafico aggiornato');
+
+            } catch (error) {
+                console.error('❌ Errore aggiornamento:', error);
             }
+        }
 
-            console.log('Analisi completata:', {
-                cicliOk: okMarkers.length,
-                scarti: scartoMarkers.length,
-                fermi: fermoAree.length
-            });
-
-            // Aggiorna il grafico
-            chart.data.labels = timesF.map(t => t.toLocaleTimeString());
-            chart.data.datasets[0].data = smoothed;
-            chart.data.datasets[1].data = okMarkers;
-            chart.data.datasets[2].data = scartoMarkers;
-            chart.update();
-
-            // Calcola metriche per turno - identico al tuo codice
-            const riassuntoTurni = Object.entries(turniData).map(([turno, entries]) => {
+        // === FUNZIONI DI SUPPORTO ===
+        
+        function calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree) {
+            return Object.entries(turniData).map(([turno, entries]) => {
                 const buoni = entries.length;
                 const scarti = scartiTurno[turno];
                 const cicloTotale = buoni + scarti;
                 const qualita = cicloTotale > 0 ? (buoni / cicloTotale) * 100 : 0;
                 const produttivita = target > 0 ? (buoni / (target / 3)) * 100 : 0;
 
-                // Calcola disponibilità basata sui fermi nel turno
                 const inizioTurno = new Date(inizioGiorno);
                 if (turno === 'B') inizioTurno.setHours(14);
                 if (turno === 'C') inizioTurno.setHours(22);
                 const fineTurno = new Date(inizioTurno.getTime() + 8 * 60 * 60 * 1000);
 
                 const fermoNelTurno = fermoAree
-                    .filter(f => f.x0 >= inizioTurno && f.x1 <= fineTurno)
-                    .reduce((acc, f) => acc + (f.x1 - f.x0), 0);
-                const disponibilita = 100 * ((8 * 3600 * 1000 - fermoNelTurno) / (8 * 3600 * 1000));
+                    .filter(f => (f.x0 >= inizioTurno && f.x0 < fineTurno) || 
+                                 (f.x1 > inizioTurno && f.x1 <= fineTurno) || 
+                                 (f.x0 < inizioTurno && f.x1 > fineTurno))
+                    .reduce((acc, f) => {
+                        const startTime = Math.max(f.x0.getTime(), inizioTurno.getTime());
+                        const endTime = Math.min(f.x1.getTime(), fineTurno.getTime());
+                        return acc + (endTime - startTime);
+                    }, 0);
 
-                const tempoDisponibile = (8 * 3600) - (fermoNelTurno / 1000);
-                const mediaTempo = cicloTotale > 0 ? (tempoDisponibile / cicloTotale).toFixed(1) : '-';
+                const disponibilita = 100 * ((8 * 3600 * 1000 - fermoNelTurno) / (8 * 3600 * 1000));
                 const oee = (qualita * produttivita * disponibilita) / 10000;
 
-                return { turno, buoni, scarti, qualita, produttivita, disponibilita, oee, mediaTempo };
-            });
-
-            // Aggiorna l'interfaccia
-            updateTurniDisplay(riassuntoTurni);
-            updateProductionSummary(riassuntoTurni, target);
-            updateCausaliDisplay(scartiCausali, fermiCausali);
-            updateStatusBar(datiFiltrati.length, giornoInput);
-        }
-
-        // Reset display quando non ci sono dati
-        function resetDisplays() {
-            // Reset turni
-            ['A', 'B', 'C'].forEach(turno => {
-                document.getElementById(`buoni${turno}`).textContent = '--';
-                document.getElementById(`scarti${turno}`).textContent = '--';
-                document.getElementById(`qualita${turno}`).textContent = '--%';
-                document.getElementById(`produttivita${turno}`).textContent = '--%';
-                document.getElementById(`oee${turno}`).textContent = '--%';
-            });
-
-            // Reset produzione
-            document.getElementById('totalBuoni').textContent = '--';
-            document.getElementById('totalScarti').textContent = '--';
-            document.getElementById('qualitaMedia').textContent = '--%';
-            document.getElementById('produttivitaMedia').textContent = '--%';
-            document.getElementById('disponibilitaMedia').textContent = '--%';
-            document.getElementById('oeeGiornaliero').textContent = '--%';
-
-            // Reset causali
-            for (let i = 1; i <= 3; i++) {
-                document.getElementById(`scarto${i}`).textContent = '0';
-            }
-            for (let i = 4; i <= 6; i++) {
-                document.getElementById(`fermo${i}`).textContent = '0';
-            }
-
-            // Reset grafico
-            chart.data.labels = [];
-            chart.data.datasets[0].data = [];
-            chart.data.datasets[1].data = [];
-            chart.data.datasets[2].data = [];
-            chart.update();
-
-            document.getElementById('productionAlerts').innerHTML = 
-                '<div class="alert alert-warning">⚠️ Nessun dato per il giorno selezionato</div>';
-        }
-
-        // Aggiorna display dei turni
-        function updateTurniDisplay(riassunto) {
-            riassunto.forEach(r => {
-                const turno = r.turno.toLowerCase();
-                document.getElementById(`buoni${r.turno}`).textContent = r.buoni;
-                document.getElementById(`scarti${r.turno}`).textContent = r.scarti;
-                document.getElementById(`qualita${r.turno}`).textContent = r.qualita.toFixed(1) + '%';
-                document.getElementById(`produttivita${r.turno}`).textContent = r.produttivita.toFixed(1) + '%';
-                document.getElementById(`oee${r.turno}`).textContent = r.oee.toFixed(1) + '%';
+                return { 
+                    turno, buoni, scarti, qualita, produttivita, disponibilita, oee, 
+                    fermoTempo: Math.round(fermoNelTurno / 60000) 
+                };
             });
         }
 
-        // Aggiorna riepilogo produzione
-        function updateProductionSummary(riassunto, target) {
-            const totalBuoni = riassunto.reduce((sum, r) => sum + r.buoni, 0);
-            const totalScarti = riassunto.reduce((sum, r) => sum + r.scarti, 0);
-            const qualitaMedia = riassunto.reduce((sum, r) => sum + r.qualita, 0) / 3;
-            const produttivitaMedia = riassunto.reduce((sum, r) => sum + r.produttivita, 0) / 3;
-            const disponibilitaMedia = riassunto.reduce((sum, r) => sum + r.disponibilita, 0) / 3;
-            const oeeGiornaliero = riassunto.reduce((sum, r) => sum + r.oee, 0) / 3;
+        function updateAllDisplays(riassuntoTurni, scartiCausali, fermiCausali, dataPointsCount, giornoInput, target) {
+            // Aggiorna turni
+            riassuntoTurni.forEach(r => {
+                const turno = r.turno;
+                document.getElementById(`buoni${turno}`).textContent = r.buoni;
+                document.getElementById(`scarti${turno}`).textContent = r.scarti;
+                document.getElementById(`qualita${turno}`).textContent = r.qualita.toFixed(1) + '%';
+                document.getElementById(`produttivita${turno}`).textContent = r.produttivita.toFixed(1) + '%';
+                document.getElementById(`disponibilita${turno}`).textContent = r.disponibilita.toFixed(1) + '%';
+                document.getElementById(`fermi${turno}`).textContent = r.fermoTempo + ' min';
+                document.getElementById(`oee${turno}`).textContent = r.oee.toFixed(1) + '%';
+            });
+
+            // Aggiorna produzione
+            const totalBuoni = riassuntoTurni.reduce((sum, r) => sum + r.buoni, 0);
+            const totalScarti = riassuntoTurni.reduce((sum, r) => sum + r.scarti, 0);
+            const qualitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.qualita, 0) / 3;
+            const produttivitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.produttivita, 0) / 3;
+            const disponibilitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.disponibilita, 0) / 3;
+            const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
 
             document.getElementById('totalBuoni').textContent = totalBuoni;
             document.getElementById('totalScarti').textContent = totalScarti;
@@ -1120,6 +1118,19 @@
             document.getElementById('produttivitaMedia').textContent = produttivitaMedia.toFixed(1) + '%';
             document.getElementById('disponibilitaMedia').textContent = disponibilitaMedia.toFixed(1) + '%';
             document.getElementById('oeeGiornaliero').textContent = oeeGiornaliero.toFixed(1) + '%';
+
+            // Aggiorna causali
+            document.getElementById('scarto1').textContent = scartiCausali['1'] || 0;
+            document.getElementById('scarto2').textContent = scartiCausali['2'] || 0;
+            document.getElementById('scarto3').textContent = scartiCausali['3'] || 0;
+            document.getElementById('fermo4').textContent = fermiCausali['4'] || 0;
+            document.getElementById('fermo5').textContent = fermiCausali['5'] || 0;
+            document.getElementById('fermo6').textContent = fermiCausali['6'] || 0;
+
+            // Aggiorna status
+            document.getElementById('currentDay').textContent = `Giorno: ${giornoInput}`;
+            document.getElementById('totalProduced').textContent = `Punti: ${dataPointsCount}`;
+            document.getElementById('lastUpdate').textContent = `Aggiornato: ${new Date().toLocaleTimeString()}`;
 
             // Alert produzione
             const alertsDiv = document.getElementById('productionAlerts');
@@ -1140,41 +1151,58 @@
             alertsDiv.innerHTML = alertsHTML;
         }
 
-        // Aggiorna causali
-        function updateCausaliDisplay(scarti, fermi) {
-            console.log('Aggiornamento causali:', { scarti, fermi });
-            
-            // Scarti (le chiavi sono stringhe)
-            document.getElementById('scarto1').textContent = scarti['1'] || 0;
-            document.getElementById('scarto2').textContent = scarti['2'] || 0;
-            document.getElementById('scarto3').textContent = scarti['3'] || 0;
-            
-            // Fermi (le chiavi sono stringhe)
-            document.getElementById('fermo4').textContent = fermi['4'] || 0;
-            document.getElementById('fermo5').textContent = fermi['5'] || 0;
-            document.getElementById('fermo6').textContent = fermi['6'] || 0;
+        function resetDisplays() {
+            ['A', 'B', 'C'].forEach(turno => {
+                document.getElementById(`buoni${turno}`).textContent = '--';
+                document.getElementById(`scarti${turno}`).textContent = '--';
+                document.getElementById(`qualita${turno}`).textContent = '--%';
+                document.getElementById(`produttivita${turno}`).textContent = '--%';
+                document.getElementById(`disponibilita${turno}`).textContent = '--%';
+                document.getElementById(`fermi${turno}`).textContent = '-- min';
+                document.getElementById(`oee${turno}`).textContent = '--%';
+            });
+
+            document.getElementById('totalBuoni').textContent = '--';
+            document.getElementById('totalScarti').textContent = '--';
+            document.getElementById('qualitaMedia').textContent = '--%';
+            document.getElementById('produttivitaMedia').textContent = '--%';
+            document.getElementById('disponibilitaMedia').textContent = '--%';
+            document.getElementById('oeeGiornaliero').textContent = '--%';
+
+            for (let i = 1; i <= 3; i++) {
+                document.getElementById(`scarto${i}`).textContent = '0';
+            }
+            for (let i = 4; i <= 6; i++) {
+                document.getElementById(`fermo${i}`).textContent = '0';
+            }
+
+            Plotly.purge('tempChart');
+            initializeChart();
+
+            document.getElementById('productionAlerts').innerHTML = 
+                '<div class="alert alert-warning">⚠️ Nessun dato per il giorno selezionato</div>';
         }
 
-        // Aggiorna status bar
-        function updateStatusBar(dataPoints, giorno) {
-            document.getElementById('currentDay').textContent = `Giorno: ${giorno}`;
-            document.getElementById('totalProduced').textContent = `Punti dati: ${dataPoints}`;
-            const now = new Date();
-            document.getElementById('lastUpdate').textContent = `Ultimo aggiornamento: ${now.toLocaleTimeString()}`;
-        }
-
-        // Mostra/nasconde loading
         function showLoading(show) {
             document.getElementById('loading').style.display = show ? 'block' : 'none';
             document.getElementById('tempChart').style.display = show ? 'none' : 'block';
         }
 
-        // Carica e aggiorna dati
-        function loadAndUpdateData() {
-            loadData();
+        function resetZoom() {
+            Plotly.relayout('tempChart', {
+                'xaxis.autorange': true,
+                'yaxis.autorange': true
+            });
         }
 
-        // Toggle auto-refresh
+        function setTodayDate() {
+            const today = new Date();
+            const dateString = today.toISOString().split('T')[0];
+            document.getElementById('giornoFiltro').value = dateString;
+        }
+
+        // === CONTROLLI AUTO-REFRESH ===
+        
         function toggleAutoRefresh() {
             const btn = document.getElementById('toggleRefreshBtn');
             const status = document.getElementById('refreshStatus');
@@ -1192,19 +1220,17 @@
             }
         }
 
-        // Avvia auto-refresh
         function startAutoRefresh() {
             if (refreshInterval) clearInterval(refreshInterval);
             
             refreshInterval = setInterval(() => {
-                console.log('Auto-refresh in corso...');
+                console.log('🔄 Auto-refresh...');
                 loadData();
-            }, 30000); // 30 secondi
+            }, 30000);
             
             startCountdown();
         }
 
-        // Ferma auto-refresh
         function stopAutoRefresh() {
             if (refreshInterval) {
                 clearInterval(refreshInterval);
@@ -1216,7 +1242,6 @@
             }
         }
 
-        // Countdown
         function startCountdown() {
             let seconds = 30;
             if (countdownInterval) clearInterval(countdownInterval);
@@ -1230,41 +1255,93 @@
             }, 1000);
         }
 
-        // Imposta data di oggi
-        function setTodayDate() {
-            const today = new Date();
-            const dateString = today.toISOString().split('T')[0];
-            document.getElementById('giornoFiltro').value = dateString;
-        }
-
-        // Export dati
+        // === EXPORT DATI ===
+        
         function exportData() {
-            if (!csvData || csvData.length === 0) {
-                alert('Nessun dato da esportare');
-                return;
+            try {
+                if (!csvData || csvData.length === 0) {
+                    alert('Nessun dato da esportare');
+                    return;
+                }
+                
+                const headers = ['Timestamp', 'Temp1 (°C)', 'Ciclo'];
+                const csvContent = headers.join(',') + '\n' + 
+                    csvData.map(row => `"${row.Timestamp}","${row['Temp1 (°C)']}","${row.Ciclo}"`).join('\n');
+                
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `produzione_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                console.log('✅ Export completato');
+            } catch (error) {
+                console.error('❌ Errore export:', error);
+                alert('Errore durante l\'export: ' + error.message);
             }
-            
-            const csvContent = Papa.unparse(csvData);
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `produzione_${new Date().toISOString().split('T')[0]}.csv`;
-            a.click();
-            window.URL.revokeObjectURL(url);
         }
 
-        // Inizializzazione
+        // === INIZIALIZZAZIONE ===
+        
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 === INIZIALIZZAZIONE DASHBOARD ===');
+            
             try {
-                console.log('Inizializzazione dashboard produzione...');
-                initializeChart();
-                setTodayDate();
-                loadData();
-                startAutoRefresh();
-                console.log('Dashboard inizializzato con successo!');
+                // Verifica elementi DOM
+                const requiredElements = ['tempChart', 'giornoFiltro', 'targetInput'];
+                for (const elementId of requiredElements) {
+                    if (!document.getElementById(elementId)) {
+                        throw new Error(`Elemento ${elementId} non trovato`);
+                    }
+                }
+                console.log('✅ Elementi DOM verificati');
+                
+                // Attesa Plotly
+                let plotlyAttempts = 0;
+                const initPlotly = () => {
+                    if (typeof Plotly !== 'undefined') {
+                        console.log('✅ Plotly caricato');
+                        initializeChart();
+                        setTodayDate();
+                        loadData();
+                        startAutoRefresh();
+                        
+                        // Event listeners
+                        document.getElementById('giornoFiltro').addEventListener('change', function() {
+                            console.log('📅 Data cambiata:', this.value);
+                            updateChart();
+                        });
+                        
+                        document.getElementById('targetInput').addEventListener('change', function() {
+                            console.log('🎯 Target cambiato:', this.value);
+                            updateChart();
+                        });
+                        
+                        console.log('🎉 DASHBOARD INIZIALIZZATO CON SUCCESSO!');
+                        
+                    } else {
+                        plotlyAttempts++;
+                        if (plotlyAttempts < 10) {
+                            console.log(`⏳ Attesa Plotly... ${plotlyAttempts}/10`);
+                            setTimeout(initPlotly, 500);
+                        } else {
+                            throw new Error('Plotly non caricato dopo 5 secondi');
+                        }
+                    }
+                };
+                
+                initPlotly();
+                
             } catch (error) {
-                console.error('Errore durante l\'inizializzazione:', error);
+                console.error('❌ ERRORE INIZIALIZZAZIONE:', error);
+                document.getElementById('tempChart').innerHTML = 
+                    `<div style="color: #ff4757; padding: 20px; text-align: center;">
+                        <h3>⚠️ Errore</h3>
+                        <p>${error.message}</p>
+                        <button onclick="location.reload()" style="padding: 10px 20px; margin-top: 10px;">🔄 Ricarica</button>
+                    </div>`;
             }
         });
     </script>
