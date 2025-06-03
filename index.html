@@ -349,32 +349,30 @@
 
         .efficiency-heatmap {
             display: grid;
-            grid-template-columns: repeat(24, 1fr);
-            gap: 2px;
+            grid-template-columns: repeat(auto-fit, minmax(30px, 1fr));
+            gap: 3px;
             margin-top: 15px;
-            padding: 8px;
+            padding: 10px;
             background: rgba(255, 255, 255, 0.05);
             border-radius: 8px;
             width: 100%;
             box-sizing: border-box;
-            overflow: hidden;
         }
 
         .hour-cell {
-            aspect-ratio: 1;
-            border-radius: 4px;
+            width: 100%;
+            height: 30px;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: bold;
-            min-height: 24px;
-            max-height: 30px;
             transition: all 0.2s ease;
             cursor: pointer;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            width: 100%;
             box-sizing: border-box;
+            min-width: 30px;
         }
 
         .hour-cell:hover {
@@ -503,6 +501,17 @@
             
             .header h1 {
                 font-size: 2em;
+            }
+            
+            .efficiency-heatmap {
+                gap: 1px;
+                padding: 6px;
+            }
+            
+            .hour-cell {
+                font-size: 9px;
+                min-height: 20px;
+                max-height: 24px;
             }
         }
     </style>
@@ -733,9 +742,9 @@
                     </div>
 
                     <div class="analysis-card">
-                        <div class="analysis-title">⚡ Efficienza Oraria (24h)</div>
+                        <div class="analysis-title">⚡ Efficienza Giorno Produttivo</div>
                         <div style="font-size: 0.9em; margin-bottom: 15px; color: rgba(255,255,255,0.8);">
-                            Heatmap prestazioni per fascia oraria
+                            Heatmap 06:00-05:59 (24h produzione)
                             <br><small>🔴 Critico • 🟡 Medio • 🟢 Ottimo</small>
                         </div>
                         <div class="efficiency-heatmap" id="efficiencyHeatmap"></div>
@@ -953,7 +962,7 @@
             return 'C';
         }
 
-        // Crea heatmap efficienza oraria
+        // Crea heatmap efficienza oraria (giorno produttivo 06:00-05:59)
         function createEfficiencyHeatmap(hourlyData) {
             const heatmapContainer = document.getElementById('efficiencyHeatmap');
             let html = '';
@@ -978,7 +987,18 @@
                 }
             }
             
-            for (let hour = 0; hour < 24; hour++) {
+            // Ordine delle ore per giorno produttivo: 06-23, poi 00-05
+            const productionHours = [];
+            // Ore 06-23 (giorno corrente)
+            for (let h = 6; h < 24; h++) {
+                productionHours.push(h);
+            }
+            // Ore 00-05 (giorno successivo)
+            for (let h = 0; h < 6; h++) {
+                productionHours.push(h);
+            }
+            
+            productionHours.forEach(hour => {
                 const efficiency = hourlyData[hour] || 0;
                 const colors = getGradientColor(efficiency);
                 const hourText = hour.toString().padStart(2, '0');
@@ -995,7 +1015,7 @@
                             data-efficiency="${efficiency.toFixed(1)}">
                             ${hourText}
                         </div>`;
-            }
+            });
             
             heatmapContainer.innerHTML = html;
         }
