@@ -1811,4 +1811,727 @@
 
                 // Ottieni dati per la macchina selezionata
                 const machineData = filterDataForMachine(currentMachine);
-                const { times: times
+                const { times: timesF, originalData: dataF, ciclo: cicloF } = machineData;
+                
+                if (!timesF.length) {
+                    console.log('❌ Nessun dato per la macchina:', currentMachine);
+                    resetDisplays();
+                    return;
+                }
+
+                const [year, month, day] = giornoInput.split('-');
+                const inizioGiorno = new Date(+year, month - 1, +day, 6, 0, 0);
+                const fineGiorno = new Date(inizioGiorno.getTime() + 24 * 60 * 60 * 1000);
+
+                const datiFiltrati = timesF.map((t, i) => ({ 
+                    time: t, 
+                    temp: dataF[i], 
+                    ciclo: cicloF[i] 
+                })).filter(d => d.time >= inizioGiorno && d.time < fineGiorno);
+
+                if (!datiFiltrati.length) {
+                    console.log('❌ Nessun dato per il giorno');
+                    resetDisplays();
+                    return;
+                }
+
+                console.log('✅ Dati filtrati per', currentMachine, ':', datiFiltrati.length, 'punti');
+
+                const timesFiltered = datiFiltrati.map(d => d.time);
+                const dataFiltered = datiFiltrati.map(d => d.temp);
+                const cicloFiltered = datiFiltrati.map(d => d.ciclo);
+                const smoothed = smoothData(dataFiltered);
+
+                // Analisi dati produzione
+                const turniData = { A: [], B: [], C: [] };
+                const scartiTurno = { A: 0, B: 0, C: 0 };
+                const scartiCausali = { '1': 0, '2': 0, '3': 0 };
+                const fermiCausali = { '4': 0, '5': 0, '6': 0 };
+                const hourlyEfficiency = new Array(24).fill(0);
+
+                const okMarkers = [], scartoMarkers = [], fermoAree = [];
+                let inFermo = false, fermoStartTime = null;
+
+                for (let i = 0; i < timesFiltered.length; i++) {
+                    const turno = getTurno(timesFiltered[i]);
+                    const c = cicloFiltered[i];
+                    const hour = timesFiltered[i].getHours();
+
+                    if (c === 'ok') {
+                        okMarkers.push({ x: timesFiltered[i], y: Math.round(smoothed[i]) });
+                        const delta = i > 0 ? (timesFiltered[i] - timesFiltered[i - 1]) / 1000 : 0;
+                        turniData[turno].push({ index: i, tempo: delta });
+                        hourlyEfficiency[hour] += 1;
+                    } 
+                    else if (['1', '2', '3'].includes(c)) {
+                        scartoMarkers.push({ 
+                            x: timesFiltered[i], 
+                            y: Math.round(smoothed[i]), 
+                            label: c 
+                        });
+                        scartiTurno[turno]++;
+                        scartiCausali[c]++;
+                    }
+
+                    if (!inFermo && typeof c === 'string' && c.trim().toLowerCase() === 'fermo') {
+                        inFermo = true;
+                        fermoStartTime = timesFiltered[i];
+                    } else if (inFermo && ['4', '5', '6'].includes(c)) {
+                        fermiCausali[c]++;
+                        fermoAree.push({ 
+                            x0: fermoStartTime, 
+                            x1: timesFiltered[i], 
+                            causale: c 
+                        });
+                        inFermo = false;
+                        fermoStartTime = null;
+                    }
+                }
+
+                if (inFermo && fermoStartTime) {
+                    fermiCausali['4']++;
+                    fermoAree.push({ 
+                        x0: fermoStartTime, 
+                        x1: timesFiltered[timesFiltered.length - 1],
+                        causale: '4' 
+                    });
+                }
+
+                // Prepara traces Plotly
+                const traces = [];
+
+                traces.push({
+                    x: timesFiltered,
+                    y: smoothed,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Temperatura (°C)',
+                    line: { color: '#00ffcc', width: 3, shape: 'spline' },
+                    fill: 'tozeroy',
+                    fillcolor: 'rgba(0, 255, 204, 0.1)',
+                    hovertemplate: '<b>%{y:.1f}°C</b><br>%{x|%H:%M}<extra></extra>'
+                });
+
+                if (okMarkers.length > 0) {
+                    traces.push({
+                        x: okMarkers.map(m => m.x),
+                        y: okMarkers.map(m => m.y),
+                        type: 'scatter',
+                        mode: 'markers',
+                        name: 'Cicli OK',
+                        marker: { color: '#00ff88', size: 8, symbol: 'circle' },
+                        hovertemplate: '<b>✅ Ciclo OK</b><br>%{y:.1f}°C<br>%{x|%H:%M}<extra></extra>'
+                    });
+                }
+
+                if (scartoMarkers.length > 0) {
+                    traces.push({
+                        x: scartoMarkers.map(m => m.x),
+                        y: scartoMarkers.map(m => m.y),
+                        type: 'scatter',
+                        mode: 'markers',
+                        name: 'Scarti',
+                        marker: { color: '#ff4757', size: 10, symbol: 'x' },
+                        hovertemplate: '<b>❌ Scarto Causale %{text}</b><br>%{y:.1f}°C<br>%{x|%H:%M}<extra></extra>',
+                        text: scartoMarkers.map(m => m.label)
+                    });
+                }
+
+                if (fermoAree.length > 0) {
+                    const fermoMarkers = fermoAree.map(fermo => ({
+                        x: new Date((fermo.x0.getTime() + fermo.x1.getTime()) / 2),
+                        y: 380,
+                        causale: fermo.causale
+                    }));
+
+                    traces.push({
+                        x: fermoMarkers.map(m => m.x),
+                        y: fermoMarkers.map(m => m.y),
+                        type: 'scatter',
+                        mode: 'markers',
+                        name: 'Fermi',
+                        marker: { color: '#ffa502', size: 12, symbol: 'square' },
+                        hovertemplate: '<b>⏸️ Fermo Causale %{text}</b><br>%{x|%H:%M}<extra></extra>',
+                        text: fermoMarkers.map(m => m.causale)
+                    });
+                }
+
+                // Layout con shapes
+                const shapes = [];
+                const turno1End = new Date(inizioGiorno.getTime() + 8 * 60 * 60 * 1000);
+                const turno2End = new Date(inizioGiorno.getTime() + 16 * 60 * 60 * 1000);
+
+                shapes.push(
+                    {
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: inizioGiorno, x1: turno1End, y0: 0, y1: 1,
+                        fillcolor: 'rgba(255, 107, 107, 0.15)', opacity: 0.3, line: { width: 0 }
+                    },
+                    {
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: turno1End, x1: turno2End, y0: 0, y1: 1,
+                        fillcolor: 'rgba(255, 165, 2, 0.15)', opacity: 0.3, line: { width: 0 }
+                    },
+                    {
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: turno2End, x1: fineGiorno, y0: 0, y1: 1,
+                        fillcolor: 'rgba(69, 183, 209, 0.15)', opacity: 0.3, line: { width: 0 }
+                    }
+                );
+
+                fermoAree.forEach(fermo => {
+                    shapes.push({
+                        type: 'rect', xref: 'x', yref: 'paper',
+                        x0: fermo.x0, x1: fermo.x1, y0: 0, y1: 1,
+                        fillcolor: 'rgba(255, 255, 0, 0.3)', opacity: 0.6,
+                        line: { color: 'rgba(255, 255, 0, 0.8)', width: 2 }
+                    });
+                });
+
+                // Aggiorna titolo grafico per riflettere macchina selezionata
+                let chartTitle = '🏭 Andamento Termico Produzione - Cicli Stampo';
+                if (currentMachine !== 'ALL') {
+                    const machineNames = {
+                        'M001': 'Macchina M001',
+                        'M002': 'Macchina M002', 
+                        'M003': 'Macchina M003'
+                    };
+                    chartTitle = `🔧 ${machineNames[currentMachine] || currentMachine} - Cicli Stampo`;
+                }
+
+                const layout = {
+                    title: {
+                        text: chartTitle,
+                        font: { size: 18, color: '#fff', family: 'Orbitron' }, x: 0.5
+                    },
+                    plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#fff', family: 'Exo 2' },
+                    margin: { t: 60, b: 50, l: 60, r: 50 },
+                    
+                    xaxis: {
+                        title: { text: 'Orario', font: { size: 14, color: '#fff', family: 'Exo 2' } },
+                        tickfont: { size: 12, color: '#fff', family: 'Orbitron' },
+                        gridcolor: 'rgba(255, 255, 255, 0.1)',
+                        tickformat: '%H:%M', nticks: 8, type: 'date',
+                        range: [inizioGiorno, fineGiorno]
+                    },
+                    
+                    yaxis: {
+                        title: { text: 'Temperatura (°C)', font: { size: 14, color: '#fff', family: 'Exo 2' } },
+                        tickfont: { size: 12, color: '#fff', family: 'Orbitron' },
+                        gridcolor: 'rgba(255, 255, 255, 0.15)',
+                        ticksuffix: '°C', autorange: true
+                    },
+                    
+                    hovermode: 'x unified', showlegend: false, shapes: shapes
+                };
+
+                const config = {
+                    displayModeBar: true,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                    displaylogo: false, responsive: true,
+                    toImageButtonOptions: {
+                        format: 'png',
+                        filename: `dashboard_${currentMachine}_termica`,
+                        height: 500,
+                        width: 900,
+                        scale: 1
+                    }
+                };
+
+                Plotly.react('tempChart', traces, layout, config);
+
+                // Calcola e aggiorna metriche
+                const riassuntoTurni = calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree);
+                updateAllDisplays(riassuntoTurni, scartiCausali, fermiCausali, datiFiltrati.length, giornoInput, target);
+                updateAdvancedAnalytics(riassuntoTurni, scartiCausali, fermiCausali, hourlyEfficiency, target);
+                
+                // Aggiorna panoramica stabilimento se in vista aggregata
+                updatePlantOverview();
+
+                console.log('✅ Grafico aggiornato per', currentMachine);
+
+            } catch (error) {
+                console.error('❌ Errore aggiornamento:', error);
+            }
+        }
+
+        // === FUNZIONI DI SUPPORTO ===
+        
+        function calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree) {
+            return Object.entries(turniData).map(([turno, entries]) => {
+                const buoni = entries.length;
+                const scarti = scartiTurno[turno];
+                const cicloTotale = buoni + scarti;
+                const qualita = cicloTotale > 0 ? (buoni / cicloTotale) * 100 : 0;
+                const produttivita = target > 0 ? (buoni / (target / 3)) * 100 : 0;
+
+                const inizioTurno = new Date(inizioGiorno);
+                if (turno === 'B') inizioTurno.setHours(14);
+                if (turno === 'C') inizioTurno.setHours(22);
+                const fineTurno = new Date(inizioTurno.getTime() + 8 * 60 * 60 * 1000);
+
+                const fermoNelTurno = fermoAree
+                    .filter(f => (f.x0 >= inizioTurno && f.x0 < fineTurno) || 
+                                 (f.x1 > inizioTurno && f.x1 <= fineTurno) || 
+                                 (f.x0 < inizioTurno && f.x1 > fineTurno))
+                    .reduce((acc, f) => {
+                        const startTime = Math.max(f.x0.getTime(), inizioTurno.getTime());
+                        const endTime = Math.min(f.x1.getTime(), fineTurno.getTime());
+                        return acc + (endTime - startTime);
+                    }, 0);
+
+                const disponibilita = 100 * ((8 * 3600 * 1000 - fermoNelTurno) / (8 * 3600 * 1000));
+                const oee = (qualita * produttivita * disponibilita) / 10000;
+
+                return { 
+                    turno, buoni, scarti, qualita, produttivita, disponibilita, oee, 
+                    fermoTempo: Math.round(fermoNelTurno / 60000) 
+                };
+            });
+        }
+
+        function updateAllDisplays(riassuntoTurni, scartiCausali, fermiCausali, dataPointsCount, giornoInput, target) {
+            // Aggiorna turni
+            riassuntoTurni.forEach(r => {
+                const turno = r.turno;
+                document.getElementById(`buoni${turno}`).textContent = r.buoni;
+                document.getElementById(`scarti${turno}`).textContent = r.scarti;
+                document.getElementById(`qualita${turno}`).textContent = r.qualita.toFixed(1) + '%';
+                document.getElementById(`produttivita${turno}`).textContent = r.produttivita.toFixed(1) + '%';
+                document.getElementById(`disponibilita${turno}`).textContent = r.disponibilita.toFixed(1) + '%';
+                document.getElementById(`fermi${turno}`).textContent = r.fermoTempo + ' min';
+                document.getElementById(`oee${turno}`).textContent = r.oee.toFixed(1) + '%';
+            });
+
+            // Aggiorna produzione
+            const totalBuoni = riassuntoTurni.reduce((sum, r) => sum + r.buoni, 0);
+            const totalScarti = riassuntoTurni.reduce((sum, r) => sum + r.scarti, 0);
+            const qualitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.qualita, 0) / 3;
+            const produttivitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.produttivita, 0) / 3;
+            const disponibilitaMedia = riassuntoTurni.reduce((sum, r) => sum + r.disponibilita, 0) / 3;
+            const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
+
+            document.getElementById('totalBuoni').textContent = totalBuoni;
+            document.getElementById('totalScarti').textContent = totalScarti;
+            document.getElementById('qualitaMedia').textContent = qualitaMedia.toFixed(1) + '%';
+            document.getElementById('produttivitaMedia').textContent = produttivitaMedia.toFixed(1) + '%';
+            document.getElementById('disponibilitaMedia').textContent = disponibilitaMedia.toFixed(1) + '%';
+            document.getElementById('oeeGiornaliero').textContent = oeeGiornaliero.toFixed(1) + '%';
+
+            // Aggiorna causali
+            document.getElementById('scarto1').textContent = scartiCausali['1'] || 0;
+            document.getElementById('scarto2').textContent = scartiCausali['2'] || 0;
+            document.getElementById('scarto3').textContent = scartiCausali['3'] || 0;
+            document.getElementById('fermo4').textContent = fermiCausali['4'] || 0;
+            document.getElementById('fermo5').textContent = fermiCausali['5'] || 0;
+            document.getElementById('fermo6').textContent = fermiCausali['6'] || 0;
+
+            // Aggiorna status
+            document.getElementById('currentDay').textContent = `Giorno: ${giornoInput}`;
+            document.getElementById('totalProduced').textContent = `Punti: ${dataPointsCount}`;
+            document.getElementById('lastUpdate').textContent = `Aggiornato: ${new Date().toLocaleTimeString()}`;
+
+            // Alert produzione
+            const alertsDiv = document.getElementById('productionAlerts');
+            let alertsHTML = '';
+            
+            if (oeeGiornaliero >= 85) {
+                alertsHTML = '<div class="alert alert-success">🎯 Eccellente! OEE superiore all\'85% - Standard World Class</div>';
+            } else if (oeeGiornaliero >= 60) {
+                alertsHTML = '<div class="alert alert-warning">⚡ OEE buono, ma migliorabile - Puntare al 85%</div>';
+            } else if (oeeGiornaliero >= 40) {
+                alertsHTML = '<div class="alert alert-danger">⚠️ OEE critico - Analizzare urgentemente le cause</div>';
+            } else {
+                alertsHTML = '<div class="alert alert-critical">🚨 OEE CRITICO - Intervento immediato necessario!</div>';
+            }
+            
+            if (totalBuoni >= target) {
+                alertsHTML += '<div class="alert alert-success">✅ Target giornaliero raggiunto!</div>';
+            } else {
+                const percentageTarget = (totalBuoni / target) * 100;
+                if (percentageTarget < 70) {
+                    alertsHTML += `<div class="alert alert-danger">❌ Target a rischio: ${percentageTarget.toFixed(1)}% raggiunto</div>`;
+                } else {
+                    alertsHTML += `<div class="alert alert-warning">⚠️ Target in corso: ${percentageTarget.toFixed(1)}% raggiunto</div>`;
+                }
+            }
+            
+            alertsDiv.innerHTML = alertsHTML;
+        }
+
+        function updateAdvancedAnalytics(riassuntoTurni, scartiCausali, fermiCausali, hourlyEfficiency, target) {
+            // KPI avanzati
+            const totalBuoni = riassuntoTurni.reduce((sum, r) => sum + r.buoni, 0);
+            const totalScarti = riassuntoTurni.reduce((sum, r) => sum + r.scarti, 0);
+            const oeeGiornaliero = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
+            
+            // Calcolo costo orario reale
+            const costoOrario = calculateHourlyCost();
+            
+            // Calcoli costi basati sui parametri reali
+            const costoUnitarioScarto = costoOrario * 0.1; // Stima: 6 minuti per gestire uno scarto
+            const costoMinutoFermo = costoOrario / 60;
+            
+            const costoScarti = totalScarti * costoUnitarioScarto;
+            const minUtiFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0) * 30; // 30 min medi per fermo
+            const costoFermi = minUtiFermi * costoMinutoFermo;
+            
+            // Calcolo perdite per mancato raggiungimento target
+            const pezziMancanti = Math.max(0, target - totalBuoni);
+            const ricavoUnitario = costoOrario * 0.2; // Stima margine 20%
+            const perditeTarget = pezziMancanti * ricavoUnitario;
+            
+            document.getElementById('costoOrario').textContent = `€${costoOrario.toFixed(0)}`;
+            document.getElementById('costoScarti').textContent = `€${costoScarti.toFixed(0)}`;
+            document.getElementById('costoFermi').textContent = `€${costoFermi.toFixed(0)}`;
+            document.getElementById('perditeTarget').textContent = `€${perditeTarget.toFixed(0)}`;
+            
+            // Tempo medio ciclo (basato sui dati reali)
+            const cicliTotali = totalBuoni + totalScarti;
+            const tempoTotaleProduzione = 8 * 3; // 3 turni da 8 ore
+            const tempoMedioCiclo = cicliTotali > 0 ? (tempoTotaleProduzione * 3600) / cicliTotali : 0; // in secondi
+            document.getElementById('tempoMedioCiclo').textContent = `${tempoMedioCiclo.toFixed(1)}s`;
+            
+            // Efficienza oraria
+            const efficienzaOraria = (totalBuoni / target) * 100;
+            document.getElementById('efficienzaOraria').textContent = `${efficienzaOraria.toFixed(1)}%`;
+            
+            // MTBF - Mean Time Between Failures
+            const totaleFermi = Object.values(fermiCausali).reduce((a, b) => a + b, 0);
+            const mtbf = totaleFermi > 0 ? (24 / totaleFermi) : 24;
+            document.getElementById('mtbf').textContent = `${mtbf.toFixed(1)}h`;
+            
+            // Analisi Pareto
+            const maxScartoKey = Object.keys(scartiCausali).reduce((a, b) => scartiCausali[a] > scartiCausali[b] ? a : b);
+            const maxFermoKey = Object.keys(fermiCausali).reduce((a, b) => fermiCausali[a] > fermiCausali[b] ? a : b);
+            
+            document.getElementById('mainScartoCause').textContent = `Causale ${maxScartoKey} (${scartiCausali[maxScartoKey]} casi)`;
+            document.getElementById('mainFermoCause').textContent = `Causale ${maxFermoKey} (${fermiCausali[maxFermoKey]} casi)`;
+            document.getElementById('oeeImpact').textContent = `${(100 - oeeGiornaliero).toFixed(1)}%`;
+            
+            // Trend (simulato per demo, in produzione verrebbe da database storico)
+            const oeeYesterday = 72 + (Math.random() * 15);
+            const prodYesterday = 88 + (Math.random() * 20);
+            const qualityYesterday = 94 + (Math.random() * 5);
+            
+            const oeeMedia = riassuntoTurni.reduce((sum, r) => sum + r.oee, 0) / 3;
+            const prodMedia = riassuntoTurni.reduce((sum, r) => sum + r.produttivita, 0) / 3;
+            const qualityMedia = riassuntoTurni.reduce((sum, r) => sum + r.qualita, 0) / 3;
+            
+            updateTrendDisplay('oeeVsYesterday', oeeMedia, oeeYesterday);
+            updateTrendDisplay('prodVsYesterday', prodMedia, prodYesterday);
+            updateTrendDisplay('qualityVsYesterday', qualityMedia, qualityYesterday);
+            
+            // Heatmap efficienza
+            createEfficiencyHeatmap(hourlyEfficiency.map(h => (h / 30) * 100));
+            
+            // Benchmark
+            const oeeVsBenchmark = oeeGiornaliero >= 85 ? '✅ Superiore' : oeeGiornaliero >= 60 ? '⚠️ Sotto media' : '❌ Critico';
+            document.getElementById('oeeVsBenchmark').textContent = oeeVsBenchmark;
+            
+            const turniOrdinati = riassuntoTurni.sort((a, b) => b.oee - a.oee);
+            document.getElementById('turniRanking').textContent = `1° ${turniOrdinati[0].turno} (${turniOrdinati[0].oee.toFixed(1)}%)`;
+            document.getElementById('targetAchieved').textContent = `${((totalBuoni / target) * 100).toFixed(1)}%`;
+            
+            // Raccomandazioni basate sui costi reali
+            generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi);
+        }
+
+        function updateTrendDisplay(elementId, current, previous) {
+            const element = document.getElementById(elementId);
+            const diff = current - previous;
+            const percentage = ((diff / previous) * 100).toFixed(1);
+            
+            if (diff > 0) {
+                element.className = 'trend-indicator trend-up';
+                element.innerHTML = `<span>↗️ +${percentage}%</span>`;
+            } else if (diff < 0) {
+                element.className = 'trend-indicator trend-down';
+                element.innerHTML = `<span>↘️ ${percentage}%</span>`;
+            } else {
+                element.className = 'trend-indicator trend-stable';
+                element.innerHTML = `<span>➡️ Stabile</span>`;
+            }
+        }
+
+        function generateRecommendations(riassuntoTurni, scartiCausali, fermiCausali, oeeGiornaliero, costoOrario, costoScarti, costoFermi) {
+            const recommendations = [];
+            
+            // Analisi OEE
+            if (oeeGiornaliero < 60) {
+                recommendations.push("🚨 PRIORITÀ: OEE sotto il 60% - Focalizzarsi su disponibilità macchina");
+            } else if (oeeGiornaliero < 75) {
+                recommendations.push("⚠️ Migliorare OEE: Analizzare tempi ciclo e qualità prodotto");
+            } else {
+                recommendations.push("✅ OEE buono: Mantenere standard attuali e puntare all'85%");
+            }
+            
+            // Analisi scarti con impatto economico
+            const totalScarti = Object.values(scartiCausali).reduce((a, b) => a + b, 0);
+            if (costoScarti > costoOrario * 2) { // Se costa più di 2 ore di produzione
+                const maxScarto = Object.keys(scartiCausali).reduce((a, b) => 
+                    scartiCausali[a] > scartiCausali[b] ? a : b);
+                recommendations.push(`💰 CRITICO: Scarti costano €${costoScarti.toFixed(0)} - Priorità Causale ${maxScarto}`);
+            } else if (totalScarti > 5) {
+                const maxScarto = Object.keys(scartiCausali).reduce((a, b) => 
+                    scartiCausali[a] > scartiCausali[b] ? a : b);
+                recommendations.push(`🔧 Ridurre scarti Causale ${maxScarto}: Revisione processo/setup`);
+            } else {
+                recommendations.push("✅ Scarti sotto controllo: Monitorare trend settimanale");
+            }
+            
+            // Analisi fermi con impatto economico
+            if (costoFermi > costoOrario * 4) { // Se costa più di 4 ore di produzione
+                recommendations.push(`⚠️ FERMI COSTOSI: €${costoFermi.toFixed(0)} persi - Manutenzione preventiva urgente`);
+            } else if (Object.values(fermiCausali).reduce((a, b) => a + b, 0) > 3) {
+                recommendations.push(`🔧 Troppi fermi: Analizzare manutenzione preventiva`);
+            } else {
+                recommendations.push("✅ Fermi sotto controllo: Continuare manutenzione programmata");
+            }
+            
+            // Aggiorna display
+            document.getElementById('recommendation1').textContent = recommendations[0] || "• Analisi completata";
+            document.getElementById('recommendation2').textContent = recommendations[1] || "• Dati sufficienti per analisi";
+            document.getElementById('recommendation3').textContent = recommendations[2] || "• Sistema monitorato correttamente";
+        }
+
+        function resetDisplays() {
+            ['A', 'B', 'C'].forEach(turno => {
+                document.getElementById(`buoni${turno}`).textContent = '--';
+                document.getElementById(`scarti${turno}`).textContent = '--';
+                document.getElementById(`qualita${turno}`).textContent = '--%';
+                document.getElementById(`produttivita${turno}`).textContent = '--%';
+                document.getElementById(`disponibilita${turno}`).textContent = '--%';
+                document.getElementById(`fermi${turno}`).textContent = '-- min';
+                document.getElementById(`oee${turno}`).textContent = '--%';
+            });
+
+            document.getElementById('totalBuoni').textContent = '--';
+            document.getElementById('totalScarti').textContent = '--';
+            document.getElementById('qualitaMedia').textContent = '--%';
+            document.getElementById('produttivitaMedia').textContent = '--%';
+            document.getElementById('disponibilitaMedia').textContent = '--%';
+            document.getElementById('oeeGiornaliero').textContent = '--%';
+
+            for (let i = 1; i <= 3; i++) {
+                document.getElementById(`scarto${i}`).textContent = '0';
+            }
+            for (let i = 4; i <= 6; i++) {
+                document.getElementById(`fermo${i}`).textContent = '0';
+            }
+
+            Plotly.purge('tempChart');
+            initializeChart();
+
+            document.getElementById('productionAlerts').innerHTML = 
+                '<div class="alert alert-warning">⚠️ Nessun dato per il giorno selezionato</div>';
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            document.getElementById('tempChart').style.display = show ? 'none' : 'block';
+        }
+
+        function resetZoom() {
+            Plotly.relayout('tempChart', {
+                'xaxis.autorange': true,
+                'yaxis.autorange': true
+            });
+        }
+
+        function setTodayDate() {
+            const today = new Date();
+            const dateString = today.toISOString().split('T')[0];
+            document.getElementById('giornoFiltro').value = dateString;
+        }
+
+        // === CONTROLLI AUTO-REFRESH ===
+        
+        function toggleAutoRefresh() {
+            const btn = document.getElementById('toggleRefreshBtn');
+            const status = document.getElementById('refreshStatus');
+            
+            if (autoRefreshEnabled) {
+                stopAutoRefresh();
+                autoRefreshEnabled = false;
+                btn.textContent = '▶️ Riprendi Auto-Refresh';
+                status.textContent = 'Fermato';
+            } else {
+                startAutoRefresh();
+                autoRefreshEnabled = true;
+                btn.textContent = '⏸️ Pausa Auto-Refresh';
+                status.textContent = 'Attivo';
+            }
+        }
+
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            
+            refreshInterval = setInterval(() => {
+                console.log('🔄 Auto-refresh...');
+                loadData();
+            }, 30000);
+            
+            startCountdown();
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+        }
+
+        function startCountdown() {
+            let seconds = 30;
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(() => {
+                if (autoRefreshEnabled) {
+                    document.getElementById('nextRefresh').textContent = seconds;
+                    seconds--;
+                    if (seconds < 0) seconds = 30;
+                }
+            }, 1000);
+        }
+
+        // === EXPORT DATI ===
+        
+        function exportData() {
+            try {
+                if (!csvData || csvData.length === 0) {
+                    alert('Nessun dato da esportare');
+                    return;
+                }
+                
+                const headers = ['Timestamp', 'Temp1 (°C)', 'Ciclo'];
+                const csvContent = headers.join(',') + '\n' + 
+                    csvData.map(row => `"${row.Timestamp}","${row['Temp1 (°C)']}","${row.Ciclo}"`).join('\n');
+                
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `produzione_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                console.log('✅ Export completato');
+            } catch (error) {
+                console.error('❌ Errore export:', error);
+                alert('Errore durante l\'export: ' + error.message);
+            }
+        }
+
+        // === INIZIALIZZAZIONE ===
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 === INIZIALIZZAZIONE DASHBOARD AVANZATO ===');
+            
+            try {
+                // Verifica elementi DOM
+                const requiredElements = ['tempChart', 'giornoFiltro', 'targetInput'];
+                for (const elementId of requiredElements) {
+                    if (!document.getElementById(elementId)) {
+                        throw new Error(`Elemento ${elementId} non trovato`);
+                    }
+                }
+                console.log('✅ Elementi DOM verificati');
+                
+                // Attesa Plotly
+                let plotlyAttempts = 0;
+                const initPlotly = () => {
+                    if (typeof Plotly !== 'undefined') {
+                        console.log('✅ Plotly caricato');
+                        initializeChart();
+                        setTodayDate();
+                        loadData();
+                        startAutoRefresh();
+                        
+                        // Event listeners
+                        document.getElementById('giornoFiltro').addEventListener('change', function() {
+                            console.log('📅 Data cambiata:', this.value);
+                            updateChart();
+                        });
+                        
+                        document.getElementById('targetInput').addEventListener('change', function() {
+                            console.log('🎯 Target cambiato:', this.value);
+                            updateChart();
+                        });
+                        
+                        // Event listener per selezione macchina
+                        document.getElementById('macchinaSelector').addEventListener('change', function() {
+                            console.log('🏭 Macchina cambiata:', this.value);
+                            changeMachineView(this.value);
+                        });
+                        
+                        // Event listeners per click su machine cards
+                        document.querySelectorAll('.machine-card').forEach(card => {
+                            card.addEventListener('click', function() {
+                                const machineId = this.getAttribute('data-machine');
+                                console.log('🔧 Click su macchina:', machineId);
+                                
+                                // Aggiorna il selector
+                                document.getElementById('macchinaSelector').value = machineId;
+                                
+                                // Cambia la vista
+                                changeMachineView(machineId);
+                                
+                                // Animazione di feedback
+                                this.style.transform = 'scale(0.95)';
+                                setTimeout(() => {
+                                    this.style.transform = '';
+                                }, 150);
+                            });
+                        });
+                        
+                        // Event listeners per parametri costo
+                        const costInputs = ['costManodopera', 'costEnergia', 'potenzaMacchina', 
+                                          'ammortamentoAnnuo', 'oreLavoro', 'altriCosti'];
+                        costInputs.forEach(inputId => {
+                            document.getElementById(inputId).addEventListener('input', function() {
+                                calculateHourlyCost();
+                                console.log('💰 Parametro costo aggiornato:', inputId, this.value);
+                                // Ricalcola anche le analisi se ci sono dati
+                                if (times.length > 0) {
+                                    setTimeout(() => updateChart(), 100);
+                                }
+                            });
+                        });
+                        
+                        // Calcola costo iniziale
+                        calculateHourlyCost();
+                        
+                        console.log('🎉 DASHBOARD AVANZATO INIZIALIZZATO CON SUCCESSO!');
+                        
+                    } else {
+                        plotlyAttempts++;
+                        if (plotlyAttempts < 10) {
+                            console.log(`⏳ Attesa Plotly... ${plotlyAttempts}/10`);
+                            setTimeout(initPlotly, 500);
+                        } else {
+                            throw new Error('Plotly non caricato dopo 5 secondi');
+                        }
+                    }
+                };
+                
+                initPlotly();
+                
+            } catch (error) {
+                console.error('❌ ERRORE INIZIALIZZAZIONE:', error);
+                document.getElementById('tempChart').innerHTML = 
+                    `<div style="color: #ff4757; padding: 20px; text-align: center;">
+                        <h3>⚠️ Errore</h3>
+                        <p>${error.message}</p>
+                        <button onclick="location.reload()" style="padding: 10px 20px; margin-top: 10px;">🔄 Ricarica</button>
+                    </div>`;
+            }
+        });
+    </script>
+</body>
+</html>
