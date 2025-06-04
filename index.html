@@ -14,10 +14,173 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            font-family: 'Orbitron', 'Courier New', monospace, sans-serif;
+            background: 
+                linear-gradient(135deg, #000000 0%, #0a0a0a 25%, #1a1a2e 50%, #16213e 75%, #000000 100%),
+                radial-gradient(circle at 25% 25%, rgba(233, 69, 96, 0.15) 0%, transparent 60%),
+                radial-gradient(circle at 75% 75%, rgba(0, 255, 255, 0.15) 0%, transparent 60%),
+                radial-gradient(circle at 50% 50%, rgba(255, 0, 255, 0.1) 0%, transparent 80%);
             min-height: 100vh;
-            color: #fff;
+            color: #00ffff;
+            position: relative;
+            overflow-x: hidden;
+            animation: bodyGlitch 10s infinite;
+        }
+
+        @keyframes bodyGlitch {
+            0%, 90%, 100% { filter: hue-rotate(0deg) contrast(1) brightness(1); }
+            5% { filter: hue-rotate(90deg) contrast(1.2) brightness(1.1); }
+            10% { filter: hue-rotate(180deg) contrast(0.8) brightness(0.9); }
+            15% { filter: hue-rotate(270deg) contrast(1.3) brightness(1.2); }
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 1px,
+                    rgba(0, 255, 255, 0.05) 1px,
+                    rgba(0, 255, 255, 0.05) 2px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 1px,
+                    rgba(233, 69, 96, 0.03) 1px,
+                    rgba(233, 69, 96, 0.03) 2px
+                ),
+                repeating-linear-gradient(
+                    45deg,
+                    transparent,
+                    transparent 10px,
+                    rgba(255, 0, 255, 0.02) 10px,
+                    rgba(255, 0, 255, 0.02) 12px
+                );
+            pointer-events: none;
+            z-index: -1;
+            animation: matrixGrid 8s ease-in-out infinite;
+        }
+
+        @keyframes matrixGrid {
+            0%, 100% { opacity: 0.4; transform: scale(1) rotate(0deg); }
+            25% { opacity: 0.8; transform: scale(1.05) rotate(0.5deg); }
+            50% { opacity: 0.6; transform: scale(0.95) rotate(-0.5deg); }
+            75% { opacity: 0.9; transform: scale(1.02) rotate(0.3deg); }
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 10% 10%, rgba(0, 255, 255, 0.08) 0%, transparent 30%),
+                radial-gradient(circle at 90% 90%, rgba(233, 69, 96, 0.08) 0%, transparent 30%),
+                radial-gradient(circle at 30% 70%, rgba(255, 0, 255, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 70% 30%, rgba(255, 255, 0, 0.04) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+            animation: cyberAmbient 12s ease-in-out infinite;
+        }
+
+        @keyframes cyberAmbient {
+            0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.6; }
+            25% { transform: scale(1.1) rotate(1deg); opacity: 0.8; }
+            50% { transform: scale(0.9) rotate(-1deg); opacity: 0.4; }
+            75% { transform: scale(1.05) rotate(0.5deg); opacity: 0.9; }
+        }
+
+        /* MATRIX RAIN EFFECT */
+        .matrix-rain {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .matrix-rain::before {
+            content: '01001001010101001010100101001010010101010010101001010010101001010010101010101001010100101010010101001010100101010101001010100101001010101001010100101010101001010100101';
+            position: absolute;
+            top: -50%;
+            left: 0;
+            width: 100%;
+            height: 200%;
+            color: rgba(0, 255, 255, 0.1);
+            font-family: 'Orbitron', monospace;
+            font-size: 8px;
+            line-height: 12px;
+            word-wrap: break-word;
+            animation: matrixFall 20s linear infinite;
+            white-space: pre-wrap;
+        }
+
+        @keyframes matrixFall {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        /* HOLOGRAM DISTORTION */
+        .hologram {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hologram::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 255, 255, 0.1) 2px,
+                rgba(0, 255, 255, 0.1) 4px
+            );
+            pointer-events: none;
+            z-index: 10;
+            animation: hologramScan 3s linear infinite;
+        }
+
+        @keyframes hologramScan {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        .hologram::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(45deg, rgba(0, 255, 255, 0.02) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(233, 69, 96, 0.02) 25%, transparent 25%);
+            background-size: 20px 20px;
+            pointer-events: none;
+            z-index: 9;
+            animation: hologramPattern 5s ease-in-out infinite;
+        }
+
+        @keyframes hologramPattern {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.02); }
         }
 
         .dashboard {
@@ -31,21 +194,273 @@
 
         .header {
             grid-column: 1 / -1;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 25px;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.98);
+            padding: 35px;
+            border-radius: 25px;
+            backdrop-filter: blur(30px);
+            border: 3px solid transparent;
+            background-image: 
+                linear-gradient(rgba(0, 0, 0, 0.98), rgba(0, 0, 0, 0.98)),
+                linear-gradient(45deg, #00ffff, #ff00ff, #e94560, #ffff00, #00ffff);
+            background-origin: border-box;
+            background-clip: padding-box, border-box;
+            box-shadow: 
+                0 0 80px rgba(0, 255, 255, 0.4),
+                0 0 120px rgba(233, 69, 96, 0.3),
+                0 0 160px rgba(255, 0, 255, 0.2),
+                inset 0 4px 0 rgba(0, 255, 255, 0.4),
+                inset 0 -4px 0 rgba(233, 69, 96, 0.4),
+                inset 4px 0 0 rgba(255, 0, 255, 0.3),
+                inset -4px 0 0 rgba(255, 255, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+            animation: headerGlitchSupreme 8s infinite;
+        }
+
+        @keyframes headerGlitchSupreme {
+            0%, 85%, 100% { 
+                filter: hue-rotate(0deg) contrast(1) brightness(1);
+                transform: scale(1) skew(0deg);
+            }
+            5% { 
+                filter: hue-rotate(90deg) contrast(1.3) brightness(1.2);
+                transform: scale(1.002) skew(0.1deg);
+            }
+            10% { 
+                filter: hue-rotate(180deg) contrast(0.8) brightness(0.9);
+                transform: scale(0.998) skew(-0.1deg);
+            }
+            15% { 
+                filter: hue-rotate(270deg) contrast(1.4) brightness(1.3);
+                transform: scale(1.001) skew(0.05deg);
+            }
+            20% { 
+                filter: hue-rotate(360deg) contrast(1.1) brightness(1.1);
+                transform: scale(1) skew(0deg);
+            }
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(0, 255, 255, 1), 
+                rgba(255, 0, 255, 1), 
+                rgba(233, 69, 96, 1), 
+                rgba(255, 255, 0, 1),
+                transparent);
+            animation: godModeScanLine 1.5s infinite;
+            box-shadow: 
+                0 0 30px rgba(0, 255, 255, 1),
+                0 0 60px rgba(255, 0, 255, 0.8),
+                0 0 90px rgba(233, 69, 96, 0.6);
+            z-index: 15;
+        }
+
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: -100%;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(233, 69, 96, 1), 
+                rgba(255, 255, 0, 1),
+                rgba(0, 255, 255, 1), 
+                transparent);
+            animation: godModeScanLine 2s infinite reverse;
+            box-shadow: 
+                0 0 25px rgba(233, 69, 96, 1),
+                0 0 50px rgba(255, 255, 0, 0.8),
+                0 0 75px rgba(0, 255, 255, 0.6);
+            z-index: 15;
+        }
+
+        @keyframes godModeScanLine {
+            0% { left: -100%; right: auto; }
+            100% { left: 100%; right: auto; }
+        }
+
+        /* CYBER BORDER ANIMATION */
+        .header::before,
+        .header::after {
+            animation-duration: 1s;
+        }
+
+        .header-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 20;
         }
 
         .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-size: 4.2em;
+            margin: 0;
             text-align: center;
-            background: linear-gradient(45deg, #00d4ff, #00f2fe);
+            background: linear-gradient(45deg, #00ffff, #ff00ff, #e94560, #ffff00, #00ffff, #ff00ff);
+            background-size: 600% 600%;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            animation: ultraGradientShift 1.5s ease-in-out infinite;
+            text-shadow: 
+                0 0 30px rgba(0, 255, 255, 1),
+                0 0 60px rgba(233, 69, 96, 0.8),
+                0 0 90px rgba(255, 0, 255, 0.6),
+                0 0 120px rgba(255, 255, 0, 0.4);
+            font-weight: 900;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            position: relative;
+            filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.8));
+        }
+
+        .header h1::before {
+            content: attr(data-text);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #ff0080, #00ffff, #ffff00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: supremeGlitchText 0.2s infinite;
+            opacity: 0;
+            z-index: -1;
+        }
+
+        .header h1::after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #e94560, #ff00ff, #00ffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: supremeGlitchText2 0.3s infinite;
+            opacity: 0;
+            z-index: -1;
+        }
+
+        @keyframes ultraGradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            25% { background-position: 100% 0%; }
+            50% { background-position: 100% 100%; }
+            75% { background-position: 0% 100%; }
+        }
+
+        @keyframes supremeGlitchText {
+            0%, 85%, 100% { 
+                opacity: 0; 
+                transform: translate(0); 
+                filter: hue-rotate(0deg);
+            }
+            5% { 
+                opacity: 0.9; 
+                transform: translate(-3px, 2px) scale(1.01); 
+                filter: hue-rotate(90deg);
+            }
+            10% { 
+                opacity: 0.8; 
+                transform: translate(3px, -2px) scale(0.99); 
+                filter: hue-rotate(180deg);
+            }
+            15% { 
+                opacity: 0.9; 
+                transform: translate(-2px, 3px) scale(1.005); 
+                filter: hue-rotate(270deg);
+            }
+        }
+
+        @keyframes supremeGlitchText2 {
+            0%, 90%, 100% { 
+                opacity: 0; 
+                transform: translate(0); 
+                filter: hue-rotate(0deg);
+            }
+            7% { 
+                opacity: 0.7; 
+                transform: translate(4px, -3px) scale(1.02); 
+                filter: hue-rotate(45deg);
+            }
+            14% { 
+                opacity: 0.6; 
+                transform: translate(-4px, 3px) scale(0.98); 
+                filter: hue-rotate(135deg);
+            }
+        }
+
+        .header-subtitle {
+            font-size: 1.5em;
+            color: rgba(0, 255, 255, 0.95);
+            font-style: italic;
+            text-align: center;
+            margin-top: 20px;
+            text-shadow: 
+                0 0 20px rgba(0, 255, 255, 0.8),
+                0 0 40px rgba(233, 69, 96, 0.5),
+                0 0 60px rgba(255, 0, 255, 0.3);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            animation: subtitleSupremePulse 2s ease-in-out infinite;
+            font-weight: 700;
+            position: relative;
+        }
+
+        .header-subtitle::before {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0%;
+            height: 2px;
+            background: linear-gradient(90deg, #00ffff, #ff00ff, #e94560);
+            animation: subtitleUnderline 3s ease-in-out infinite;
+            box-shadow: 0 0 20px currentColor;
+        }
+
+        @keyframes subtitleSupremePulse {
+            0%, 100% { 
+                opacity: 0.9; 
+                text-shadow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(233, 69, 96, 0.5);
+                transform: scale(1);
+            }
+            25% { 
+                opacity: 1; 
+                text-shadow: 0 0 30px rgba(0, 255, 255, 1), 0 0 60px rgba(233, 69, 96, 0.7), 0 0 90px rgba(255, 0, 255, 0.5);
+                transform: scale(1.02);
+            }
+            50% { 
+                opacity: 0.95; 
+                text-shadow: 0 0 35px rgba(255, 0, 255, 1), 0 0 70px rgba(0, 255, 255, 0.8), 0 0 105px rgba(233, 69, 96, 0.6);
+                transform: scale(1.01);
+            }
+            75% { 
+                opacity: 1; 
+                text-shadow: 0 0 25px rgba(233, 69, 96, 1), 0 0 50px rgba(255, 0, 255, 0.8), 0 0 75px rgba(0, 255, 255, 0.6);
+                transform: scale(1.015);
+            }
+        }
+
+        @keyframes subtitleUnderline {
+            0%, 100% { width: 0%; }
+            50% { width: 100%; }
         }
 
         .status-bar {
@@ -81,11 +496,11 @@
         }
 
         .sidebar {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(27, 94, 137, 0.15);
             border-radius: 15px;
             padding: 25px;
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(46, 139, 139, 0.3);
             overflow-y: auto;
         }
 
@@ -96,11 +511,11 @@
         }
 
         .chart-container {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(27, 94, 137, 0.15);
             border-radius: 15px;
             padding: 25px;
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(46, 139, 139, 0.3);
             height: 450px;
             position: relative;
         }
@@ -541,9 +956,15 @@
     </style>
 </head>
 <body>
-    <div class="dashboard">
+    <!-- MATRIX RAIN BACKGROUND -->
+    <div class="matrix-rain"></div>
+    
+    <div class="dashboard hologram">
         <header class="header">
-            <h1>🏭 Dashboard Analisi Termica Produzione</h1>
+            <div class="header-content">
+                <h1 data-text="NEW OLEF CYBER MATRIX">NEW OLEF CYBER MATRIX</h1>
+                <div class="header-subtitle">THERMAL NEURAL NETWORK • PRODUCTION INTELLIGENCE CORE</div>
+            </div>
             <div class="status-bar">
                 <div class="status-item">
                     <div class="status-indicator"></div>
@@ -573,9 +994,9 @@
                         <option value="M003">🔍 Macchina M003 - Controllo Qualità</option>
                     </select>
                 </div>
-                <div id="machineStatus" style="margin-top: 10px; padding: 8px; background: rgba(0,212,255,0.1); border-radius: 6px; font-size: 0.9em;">
-                    <strong>📊 Vista Attuale:</strong><br>
-                    <span id="currentViewStatus">Analisi aggregata di tutto lo stabilimento</span>
+                <div id="machineStatus" style="margin-top: 10px; padding: 8px; background: rgba(0, 255, 255, 0.1); border-radius: 6px; font-size: 0.9em; border: 1px solid rgba(0, 255, 255, 0.3);">
+                    <strong>📊 SISTEMA STATUS:</strong><br>
+                    <span id="currentViewStatus" style="color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);">Analisi aggregata di tutto lo stabilimento</span>
                 </div>
             </div>
 
@@ -618,9 +1039,9 @@
                     <label for="altriCosti">Altri Costi Fissi (€/h):</label>
                     <input type="number" id="altriCosti" value="8" min="0" step="0.1">
                 </div>
-                <div style="margin: 15px 0; padding: 10px; background: rgba(0, 212, 255, 0.1); border-radius: 8px; font-size: 0.9em;">
+                <div style="margin: 15px 0; padding: 10px; background: rgba(0, 255, 255, 0.1); border-radius: 8px; font-size: 0.9em; border: 1px solid rgba(0, 255, 255, 0.3);">
                     <strong>💡 Costo Orario Calcolato:</strong><br>
-                    <span id="costoOrarioCalcolato" style="font-size: 1.2em; color: #00d4ff;">€-- /h</span>
+                    <span id="costoOrarioCalcolato" style="font-size: 1.2em; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);">€-- /h</span>
                 </div>
             </div>
 
@@ -674,49 +1095,49 @@
         <main class="main-content">
             <!-- Sezione Panoramica Stabilimento (visibile solo in vista aggregata) -->
             <div class="plant-overview" id="plantOverview" style="display: block;">
-                <div style="background: rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2);">
-                    <h3 style="color: #00d4ff; margin-bottom: 15px; text-align: center;">🏭 Panoramica Stabilimento</h3>
+                <div style="background: rgba(0, 0, 0, 0.8); border-radius: 15px; padding: 20px; backdrop-filter: blur(20px); border: 1px solid rgba(0, 255, 255, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);">
+                    <h3 style="color: #00ffff; margin-bottom: 15px; text-align: center; text-shadow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.4); text-transform: uppercase; letter-spacing: 3px; font-family: 'Orbitron', monospace; font-weight: 900; font-size: 1.6em;">🏭 CYBER MATRIX • NEURAL PLANT NETWORK</h3>
                     
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                        <div class="machine-card" data-machine="M001" style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent;">
+                        <div class="machine-card" data-machine="M001" style="background: rgba(0, 0, 0, 0.7); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid rgba(0, 255, 255, 0.3);">
                             <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
-                                <span style="font-weight: bold; color: #00d4ff;">🔧 M001 - Stampa</span>
-                                <span id="statusM001" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #2ecc71; color: white;">●ONLINE</span>
+                                <span style="font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);">🔧 M001 - STAMPA</span>
+                                <span id="statusM001" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #2ecc71; color: white; box-shadow: 0 0 10px #2ecc71;">●ONLINE</span>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center;">
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="oeeM001">--%</span><br><small>OEE</small></div>
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="prodM001">--</span><br><small>Prodotti</small></div>
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="scartiM001">--</span><br><small>Scarti</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="oeeM001">--%</span><br><small style="color: rgba(0, 255, 255, 0.8);">OEE</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="prodM001">--</span><br><small style="color: rgba(0, 255, 255, 0.8);">PRODOTTI</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="scartiM001">--</span><br><small style="color: rgba(0, 255, 255, 0.8);">SCARTI</small></div>
                             </div>
                         </div>
                         
-                        <div class="machine-card" data-machine="M002" style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent;">
+                        <div class="machine-card" data-machine="M002" style="background: rgba(0, 0, 0, 0.7); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid rgba(0, 255, 255, 0.3);">
                             <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
-                                <span style="font-weight: bold; color: #00d4ff;">⚙️ M002 - Assemblaggio</span>
-                                <span id="statusM002" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #f39c12; color: white;">●ATTESA</span>
+                                <span style="font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);">⚙️ M002 - ASSEMBLAGGIO</span>
+                                <span id="statusM002" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #f39c12; color: white; box-shadow: 0 0 10px #f39c12;">●ATTESA</span>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center;">
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="oeeM002">--%</span><br><small>OEE</small></div>
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="prodM002">--</span><br><small>Prodotti</small></div>
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="scartiM002">--</span><br><small>Scarti</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="oeeM002">--%</span><br><small style="color: rgba(0, 255, 255, 0.8);">OEE</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="prodM002">--</span><br><small style="color: rgba(0, 255, 255, 0.8);">PRODOTTI</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="scartiM002">--</span><br><small style="color: rgba(0, 255, 255, 0.8);">SCARTI</small></div>
                             </div>
                         </div>
                         
-                        <div class="machine-card" data-machine="M003" style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent;">
+                        <div class="machine-card" data-machine="M003" style="background: rgba(0, 0, 0, 0.7); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid rgba(0, 255, 255, 0.3);">
                             <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
-                                <span style="font-weight: bold; color: #00d4ff;">🔍 M003 - Controllo</span>
-                                <span id="statusM003" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #e74c3c; color: white;">●FERMO</span>
+                                <span style="font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);">🔍 M003 - CONTROLLO</span>
+                                <span id="statusM003" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #e74c3c; color: white; box-shadow: 0 0 10px #e74c3c;">●FERMO</span>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center;">
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="oeeM003">--%</span><br><small>OEE</small></div>
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="prodM003">--</span><br><small>Prodotti</small></div>
-                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="scartiM003">--</span><br><small>Scarti</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="oeeM003">--%</span><br><small style="color: rgba(0, 255, 255, 0.8);">OEE</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="prodM003">--</span><br><small style="color: rgba(0, 255, 255, 0.8);">PRODOTTI</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #00ffff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);" id="scartiM003">--</span><br><small style="color: rgba(0, 255, 255, 0.8);">SCARTI</small></div>
                             </div>
                         </div>
                     </div>
                     
-                    <div style="text-align: center; color: rgba(255,255,255,0.8); font-size: 0.9em;">
-                        💡 <strong>Clicca su una macchina</strong> per analisi dettagliata o usa il selettore qui sopra
+                    <div style="text-align: center; color: rgba(0, 255, 255, 0.8); font-size: 0.9em; text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);">
+                        💡 <strong>CLICCA SU UNA MACCHINA</strong> per analisi dettagliata o usa il selettore
                     </div>
                 </div>
             </div>
@@ -730,7 +1151,7 @@
             </div>
 
             <div class="production-summary">
-                <h3 style="margin-bottom: 20px; color: #00d4ff;">📈 Riepilogo Produzione Giornaliera</h3>
+                <h3 style="margin-bottom: 20px; color: #00ffff; text-shadow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.4); text-transform: uppercase; letter-spacing: 2px; font-family: 'Orbitron', monospace; font-weight: 900; font-size: 1.4em;">📈 NEURAL PRODUCTION MATRIX • DAILY ANALYSIS</h3>
                 <div class="summary-grid">
                     <div class="stat-box">
                         <div class="stat-value" id="totalBuoni">--</div>
@@ -761,7 +1182,7 @@
             </div>
 
             <div class="analytics-section">
-                <h3 style="color: #00d4ff; margin-bottom: 20px;">🎯 Analisi Avanzate per Direttore Produzione</h3>
+                <h3 style="color: #00ffff; margin-bottom: 20px; text-shadow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.4); text-transform: uppercase; letter-spacing: 2px; font-family: 'Orbitron', monospace; font-weight: 900; font-size: 1.4em;">🎯 CYBER INTELLIGENCE CORE • EXECUTIVE NEURAL NET</h3>
                 
                 <div class="kpi-cards">
                     <div class="kpi-card">
@@ -2116,6 +2537,32 @@
                         document.getElementById('targetInput').addEventListener('change', function() {
                             console.log('🎯 Target cambiato:', this.value);
                             updateChart();
+                        });
+                        
+                        // Event listener per selezione macchina
+                        document.getElementById('macchinaSelector').addEventListener('change', function() {
+                            console.log('🏭 Macchina cambiata:', this.value);
+                            changeMachineView(this.value);
+                        });
+                        
+                        // Event listeners per click su machine cards
+                        document.querySelectorAll('.machine-card').forEach(card => {
+                            card.addEventListener('click', function() {
+                                const machineId = this.getAttribute('data-machine');
+                                console.log('🔧 Click su macchina:', machineId);
+                                
+                                // Aggiorna il selector
+                                document.getElementById('macchinaSelector').value = machineId;
+                                
+                                // Cambia la vista
+                                changeMachineView(machineId);
+                                
+                                // Animazione di feedback
+                                this.style.transform = 'scale(0.95)';
+                                setTimeout(() => {
+                                    this.style.transform = '';
+                                }, 150);
+                            });
                         });
                         
                         // Event listeners per parametri costo
