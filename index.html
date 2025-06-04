@@ -488,6 +488,30 @@
             gap: 3px;
         }
 
+        .machine-card:hover {
+            border-color: #00d4ff !important;
+            background: rgba(0, 212, 255, 0.1) !important;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 212, 255, 0.2);
+        }
+
+        .machine-status {
+            animation: statusPulse 2s infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        .plant-overview {
+            transition: all 0.3s ease;
+        }
+
+        .plant-overview.hidden {
+            display: none !important;
+        }
+
         @media (max-width: 1024px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -538,6 +562,23 @@
         </header>
 
         <aside class="sidebar">
+            <div class="filter-section">
+                <h3>🏭 Selezione Stabilimento</h3>
+                <div class="filter-group">
+                    <label for="macchinaSelector">Macchina/Vista:</label>
+                    <select id="macchinaSelector">
+                        <option value="ALL">🏭 Tutte le Macchine (Vista Aggregata)</option>
+                        <option value="M001">🔧 Macchina M001 - Stampa</option>
+                        <option value="M002">⚙️ Macchina M002 - Assemblaggio</option>
+                        <option value="M003">🔍 Macchina M003 - Controllo Qualità</option>
+                    </select>
+                </div>
+                <div id="machineStatus" style="margin-top: 10px; padding: 8px; background: rgba(0,212,255,0.1); border-radius: 6px; font-size: 0.9em;">
+                    <strong>📊 Vista Attuale:</strong><br>
+                    <span id="currentViewStatus">Analisi aggregata di tutto lo stabilimento</span>
+                </div>
+            </div>
+
             <div class="filter-section">
                 <h3>📅 Controllo Produzione</h3>
                 <div class="filter-group">
@@ -631,6 +672,55 @@
         </aside>
 
         <main class="main-content">
+            <!-- Sezione Panoramica Stabilimento (visibile solo in vista aggregata) -->
+            <div class="plant-overview" id="plantOverview" style="display: block;">
+                <div style="background: rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2);">
+                    <h3 style="color: #00d4ff; margin-bottom: 15px; text-align: center;">🏭 Panoramica Stabilimento</h3>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <div class="machine-card" data-machine="M001" style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent;">
+                            <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
+                                <span style="font-weight: bold; color: #00d4ff;">🔧 M001 - Stampa</span>
+                                <span id="statusM001" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #2ecc71; color: white;">●ONLINE</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center;">
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="oeeM001">--%</span><br><small>OEE</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="prodM001">--</span><br><small>Prodotti</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="scartiM001">--</span><br><small>Scarti</small></div>
+                            </div>
+                        </div>
+                        
+                        <div class="machine-card" data-machine="M002" style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent;">
+                            <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
+                                <span style="font-weight: bold; color: #00d4ff;">⚙️ M002 - Assemblaggio</span>
+                                <span id="statusM002" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #f39c12; color: white;">●ATTESA</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center;">
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="oeeM002">--%</span><br><small>OEE</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="prodM002">--</span><br><small>Prodotti</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="scartiM002">--</span><br><small>Scarti</small></div>
+                            </div>
+                        </div>
+                        
+                        <div class="machine-card" data-machine="M003" style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent;">
+                            <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
+                                <span style="font-weight: bold; color: #00d4ff;">🔍 M003 - Controllo</span>
+                                <span id="statusM003" class="machine-status" style="padding: 4px 8px; border-radius: 12px; font-size: 0.8em; background: #e74c3c; color: white;">●FERMO</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center;">
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="oeeM003">--%</span><br><small>OEE</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="prodM003">--</span><br><small>Prodotti</small></div>
+                                <div><span style="font-size: 1.2em; font-weight: bold; color: #fff;" id="scartiM003">--</span><br><small>Scarti</small></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; color: rgba(255,255,255,0.8); font-size: 0.9em;">
+                        💡 <strong>Clicca su una macchina</strong> per analisi dettagliata o usa il selettore qui sopra
+                    </div>
+                </div>
+            </div>
+
             <div class="chart-container">
                 <div id="tempChart"></div>
                 <div class="loading" id="loading">
@@ -905,6 +995,119 @@
         let refreshInterval = null, countdownInterval = null;
         let autoRefreshEnabled = true, lastCSV = '';
         let historicalData = []; // Per trend analysis
+        let currentMachine = 'ALL'; // Macchina attualmente selezionata
+        let allMachinesData = {}; // Dati di tutte le macchine
+
+        // === GESTIONE MULTI-MACCHINA ===
+        
+        // Cambia vista macchina
+        function changeMachineView(machineId) {
+            currentMachine = machineId;
+            console.log('🔄 Cambio vista macchina:', machineId);
+            
+            // Aggiorna status display
+            const statusElement = document.getElementById('currentViewStatus');
+            if (machineId === 'ALL') {
+                statusElement.textContent = 'Analisi aggregata di tutto lo stabilimento';
+                document.getElementById('plantOverview').style.display = 'block';
+            } else {
+                const machineNames = {
+                    'M001': 'Macchina M001 - Stampa',
+                    'M002': 'Macchina M002 - Assemblaggio', 
+                    'M003': 'Macchina M003 - Controllo Qualità'
+                };
+                statusElement.textContent = `Focus su ${machineNames[machineId] || machineId}`;
+                document.getElementById('plantOverview').style.display = 'none';
+            }
+            
+            // Ricarica i dati per la nuova vista
+            updateChart();
+        }
+        
+        // Aggrega dati da tutte le macchine
+        function aggregateAllMachinesData() {
+            if (currentMachine !== 'ALL') {
+                return { times, originalData, ciclo, csvData };
+            }
+            
+            // Per ora simula dati di più macchine
+            // In futuro questo leggerà dal CSV multi-macchina
+            return generateMultiMachineData();
+        }
+        
+        // Genera dati simulati per più macchine (flessibile per CSV futuro)
+        function generateMultiMachineData() {
+            // Questa funzione sarà sostituita quando avremo il CSV multi-macchina
+            const aggregatedTimes = [...times];
+            const aggregatedData = originalData.map(temp => temp + (Math.random() - 0.5) * 2);
+            const aggregatedCiclo = [...ciclo];
+            const aggregatedCSV = csvData.map(row => ({...row}));
+            
+            return {
+                times: aggregatedTimes,
+                originalData: aggregatedData,
+                ciclo: aggregatedCiclo,
+                csvData: aggregatedCSV
+            };
+        }
+        
+        // Filtra dati per macchina specifica
+        function filterDataForMachine(machineId) {
+            if (machineId === 'ALL') {
+                return aggregateAllMachinesData();
+            }
+            
+            // Se CSV ha colonna MachineID, filtra per quella macchina
+            // Altrimenti usa tutti i dati (backward compatibility)
+            const hasMultipleMachines = csvData.some(row => row.MachineID);
+            
+            if (hasMultipleMachines) {
+                const filteredCSV = csvData.filter(row => row.MachineID === machineId);
+                const filteredTimes = [];
+                const filteredData = [];
+                const filteredCiclo = [];
+                
+                filteredCSV.forEach((row, i) => {
+                    if (times[i]) {
+                        filteredTimes.push(times[i]);
+                        filteredData.push(originalData[i]);
+                        filteredCiclo.push(ciclo[i]);
+                    }
+                });
+                
+                return {
+                    times: filteredTimes,
+                    originalData: filteredData,
+                    ciclo: filteredCiclo,
+                    csvData: filteredCSV
+                };
+            } else {
+                // Backward compatibility: CSV senza MachineID
+                return { times, originalData, ciclo, csvData };
+            }
+        }
+        
+        // Aggiorna panoramica stabilimento
+        function updatePlantOverview() {
+            if (currentMachine !== 'ALL') return;
+            
+            // Simula dati delle tre macchine (da sostituire con dati reali)
+            const machineData = {
+                M001: { oee: 87.3, prodotti: 156, scarti: 8, status: 'ONLINE', color: '#2ecc71' },
+                M002: { oee: 82.1, prodotti: 142, scarti: 12, status: 'ATTESA', color: '#f39c12' },
+                M003: { oee: 76.8, prodotti: 98, scarti: 15, status: 'FERMO', color: '#e74c3c' }
+            };
+            
+            Object.entries(machineData).forEach(([machineId, data]) => {
+                document.getElementById(`oeeM${machineId.slice(1)}`).textContent = `${data.oee}%`;
+                document.getElementById(`prodM${machineId.slice(1)}`).textContent = data.prodotti;
+                document.getElementById(`scartiM${machineId.slice(1)}`).textContent = data.scarti;
+                
+                const statusEl = document.getElementById(`statusM${machineId.slice(1)}`);
+                statusEl.textContent = `●${data.status}`;
+                statusEl.style.background = data.color;
+            });
+        }
 
         // === FUNZIONI UTILITY ===
         
@@ -1245,7 +1448,7 @@
         // === AGGIORNAMENTO GRAFICO ===
         
         function updateChart() {
-            console.log('🔄 Aggiornamento grafico...');
+            console.log('🔄 Aggiornamento grafico per macchina:', currentMachine);
             
             try {
                 const giornoInput = document.getElementById('giornoFiltro').value;
@@ -1256,14 +1459,24 @@
                     return;
                 }
 
+                // Ottieni dati per la macchina selezionata
+                const machineData = filterDataForMachine(currentMachine);
+                const { times: timesF, originalData: dataF, ciclo: cicloF } = machineData;
+                
+                if (!timesF.length) {
+                    console.log('❌ Nessun dato per la macchina:', currentMachine);
+                    resetDisplays();
+                    return;
+                }
+
                 const [year, month, day] = giornoInput.split('-');
                 const inizioGiorno = new Date(+year, month - 1, +day, 6, 0, 0);
                 const fineGiorno = new Date(inizioGiorno.getTime() + 24 * 60 * 60 * 1000);
 
-                const datiFiltrati = times.map((t, i) => ({ 
+                const datiFiltrati = timesF.map((t, i) => ({ 
                     time: t, 
-                    temp: originalData[i], 
-                    ciclo: ciclo[i] 
+                    temp: dataF[i], 
+                    ciclo: cicloF[i] 
                 })).filter(d => d.time >= inizioGiorno && d.time < fineGiorno);
 
                 if (!datiFiltrati.length) {
@@ -1272,13 +1485,17 @@
                     return;
                 }
 
-                console.log('✅ Dati filtrati:', datiFiltrati.length, 'punti');
+                console.log('✅ Dati filtrati per', currentMachine, ':', datiFiltrati.length, 'punti');
 
-                const timesF = datiFiltrati.map(d => d.time);
-                const dataF = datiFiltrati.map(d => d.temp);
-                const cicloF = datiFiltrati.map(d => d.ciclo);
-                const smoothed = smoothData(dataF);
+                // Il resto della funzione rimane uguale...
+                const timesFiltered = datiFiltrati.map(d => d.time);
+                const dataFiltered = datiFiltrati.map(d => d.temp);
+                const cicloFiltered = datiFiltrati.map(d => d.ciclo);
+                const smoothed = smoothData(dataFiltered);
 
+                // Continua con l'analisi esistente...
+                // [Il resto del codice di updateChart rimane identico]
+                
                 // Analisi dati produzione
                 const turniData = { A: [], B: [], C: [] };
                 const scartiTurno = { A: 0, B: 0, C: 0 };
@@ -1289,20 +1506,20 @@
                 const okMarkers = [], scartoMarkers = [], fermoAree = [];
                 let inFermo = false, fermoStartTime = null;
 
-                for (let i = 0; i < timesF.length; i++) {
-                    const turno = getTurno(timesF[i]);
-                    const c = cicloF[i];
-                    const hour = timesF[i].getHours();
+                for (let i = 0; i < timesFiltered.length; i++) {
+                    const turno = getTurno(timesFiltered[i]);
+                    const c = cicloFiltered[i];
+                    const hour = timesFiltered[i].getHours();
 
                     if (c === 'ok') {
-                        okMarkers.push({ x: timesF[i], y: Math.round(smoothed[i]) });
-                        const delta = i > 0 ? (timesF[i] - timesF[i - 1]) / 1000 : 0;
+                        okMarkers.push({ x: timesFiltered[i], y: Math.round(smoothed[i]) });
+                        const delta = i > 0 ? (timesFiltered[i] - timesFiltered[i - 1]) / 1000 : 0;
                         turniData[turno].push({ index: i, tempo: delta });
                         hourlyEfficiency[hour] += 1;
                     } 
                     else if (['1', '2', '3'].includes(c)) {
                         scartoMarkers.push({ 
-                            x: timesF[i], 
+                            x: timesFiltered[i], 
                             y: Math.round(smoothed[i]), 
                             label: c 
                         });
@@ -1312,12 +1529,12 @@
 
                     if (!inFermo && typeof c === 'string' && c.trim().toLowerCase() === 'fermo') {
                         inFermo = true;
-                        fermoStartTime = timesF[i];
+                        fermoStartTime = timesFiltered[i];
                     } else if (inFermo && ['4', '5', '6'].includes(c)) {
                         fermiCausali[c]++;
                         fermoAree.push({ 
                             x0: fermoStartTime, 
-                            x1: timesF[i], 
+                            x1: timesFiltered[i], 
                             causale: c 
                         });
                         inFermo = false;
@@ -1329,7 +1546,7 @@
                     fermiCausali['4']++;
                     fermoAree.push({ 
                         x0: fermoStartTime, 
-                        x1: timesF[timesF.length - 1],
+                        x1: timesFiltered[timesFiltered.length - 1],
                         causale: '4' 
                     });
                 }
@@ -1338,7 +1555,7 @@
                 const traces = [];
 
                 traces.push({
-                    x: timesF,
+                    x: timesFiltered,
                     y: smoothed,
                     type: 'scatter',
                     mode: 'lines',
@@ -1425,9 +1642,20 @@
                     });
                 });
 
+                // Aggiorna titolo grafico per riflettere macchina selezionata
+                let chartTitle = '🏭 Andamento Termico Produzione - Cicli Stampo';
+                if (currentMachine !== 'ALL') {
+                    const machineNames = {
+                        'M001': 'Macchina M001',
+                        'M002': 'Macchina M002', 
+                        'M003': 'Macchina M003'
+                    };
+                    chartTitle = `🔧 ${machineNames[currentMachine] || currentMachine} - Cicli Stampo`;
+                }
+
                 const layout = {
                     title: {
-                        text: '🏭 Andamento Termico Produzione - Cicli Stampo',
+                        text: chartTitle,
                         font: { size: 18, color: '#fff', family: 'Segoe UI' }, x: 0.5
                     },
                     plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
@@ -1458,7 +1686,7 @@
                     displaylogo: false, responsive: true,
                     toImageButtonOptions: {
                         format: 'png',
-                        filename: 'dashboard_termica',
+                        filename: `dashboard_${currentMachine}_termica`,
                         height: 500,
                         width: 900,
                         scale: 1
@@ -1471,8 +1699,11 @@
                 const riassuntoTurni = calculateMetrics(turniData, scartiTurno, target, inizioGiorno, fermoAree);
                 updateAllDisplays(riassuntoTurni, scartiCausali, fermiCausali, datiFiltrati.length, giornoInput, target);
                 updateAdvancedAnalytics(riassuntoTurni, scartiCausali, fermiCausali, hourlyEfficiency, target);
+                
+                // Aggiorna panoramica stabilimento se in vista aggregata
+                updatePlantOverview();
 
-                console.log('✅ Grafico aggiornato');
+                console.log('✅ Grafico aggiornato per', currentMachine);
 
             } catch (error) {
                 console.error('❌ Errore aggiornamento:', error);
